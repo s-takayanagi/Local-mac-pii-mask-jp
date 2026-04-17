@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# uv
+.uv/
+uv.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Streamlit
+.streamlit/
+
+# PyInstaller
+*.spec.bak
+dist/
+build/
+
+# Test outputs
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# GiNZA / spaCy model cache
+~/.cache/pii_masker/
+
+# Office temp files
+~$*.xlsx
+~$*.pptx
+~$*.docx
+
+# Masked output files (uncommit these intentionally)
+*_masked.xlsx
+*_masked.pptx
+*_masked.docx
+
+# Logs
+*.log
+
+# Secrets / config overrides
+.env.local
+config.local.py
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes

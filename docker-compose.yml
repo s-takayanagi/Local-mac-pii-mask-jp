@@ -1,0 +1,19 @@
+services:
+  pii-masker-ui:
+    build: .
+    image: pii-masker
+    container_name: pii-masker-ui
+    command: ["--mode", "ui"]
+    ports:
+      - "8501:8501"
+    volumes:
+      # ホストのフォルダをマウント → UI でパス指定してファイルを処理できる
+      - "${HOME}/Documents:/data:rw"
+    environment:
+      LM_STUDIO_HOST: host.docker.internal
+      LM_STUDIO_PORT: 1234
+    # macOS Docker Desktop では自動で host.docker.internal が解決される
+    # Linux 環境が必要になった場合は下記のコメントを外す
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+    restart: unless-stopped

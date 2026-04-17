@@ -1,0 +1,29 @@
+[project]
+name = "pii-masker"
+version = "1.0.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "streamlit>=1.35",
+    "streamlit-desktop-app>=0.3",
+    "fastmcp>=2.10",
+    "openpyxl>=3.1",
+    "python-pptx>=0.6",
+    "python-docx>=1.1",
+    "requests>=2.31",
+    "ginza>=5.2",
+    "ja-ginza-electra>=5.2",
+    "spacy>=3.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

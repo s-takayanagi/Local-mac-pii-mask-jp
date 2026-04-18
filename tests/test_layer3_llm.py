@@ -5,7 +5,7 @@ import json
 from unittest.mock import MagicMock, patch
 import requests
 
-from core.layer3_llm import call_masker, call_reviewer, _revert_excluded, _is_lfm2_model, _apply_lfm2_entities
+from core.layer3_llm import call_masker, call_reviewer, _revert_excluded, _is_lfm2_model, _apply_lfm2_entities, LFM2_SYSTEM
 
 
 def _make_response(body: dict, status: int = 200):
@@ -213,7 +213,7 @@ def test_apply_lfm2_entities_excluded_tags():
 
 def test_call_masker_lfm2_mode():
     body = {"human_name": ["山田太郎"], "email_address": ["test@example.com"], "company_name": []}
-    with patch("requests.post", return_value=_make_response(body)):
+    with patch("requests.post", return_value=_make_response(body)) as mock_post:
         result = call_masker(
             "山田太郎のメール: test@example.com",
             "lfm2-350m-pii-extract-jp",
@@ -223,6 +223,11 @@ def test_call_masker_lfm2_mode():
     assert "[氏名]" in result["masked_text"]
     assert "[メール]" in result["masked_text"]
     assert any(r["tag"] == "[氏名]" for r in result["replacements"])
+    # LFM2 専用システムプロンプトが使われていること
+    sent_payload = mock_post.call_args[1]["json"]
+    assert sent_payload["messages"][0]["content"] == LFM2_SYSTEM
+    # temperature=0 で呼ばれていること
+    assert sent_payload["temperature"] == 0
 
 
 def test_call_reviewer_lfm2_mode():

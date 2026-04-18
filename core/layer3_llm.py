@@ -62,7 +62,6 @@ def _call_lm_studio(
         "[LM Studio] %s リクエスト | model=%s | url=%s | プロンプト文字数=%d",
         role, model, url, prompt_chars,
     )
-    logger.debug("[LM Studio] %s システムプロンプト:\n%s", role, system)
     logger.debug("[LM Studio] %s 入力テキスト:\n%s", role, user)
 
     start = time.monotonic()

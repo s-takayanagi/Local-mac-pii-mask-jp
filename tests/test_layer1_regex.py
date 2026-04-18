@@ -130,6 +130,31 @@ def test_excluded_tags_email():
     assert "test@example.com" in text
 
 
+# --- 住所 ---
+
+def test_address_full_with_building():
+    text, reps = apply_regex("東京都渋谷区代々木1-2-3 代々木マンション401")
+    assert "[住所]" in text
+    assert any(r["tag"] == "[住所]" for r in reps)
+
+
+def test_address_without_building():
+    text, reps = apply_regex("大阪府大阪市北区梅田1-1-1")
+    assert "[住所]" in text
+    assert any(r["tag"] == "[住所]" for r in reps)
+
+
+def test_address_with_postal_code():
+    text, reps = apply_regex("〒150-0001 東京都渋谷区神宮前1-2-3")
+    assert "[郵便番号]" in text
+    assert "[住所]" in text
+
+
+def test_prefecture_only_not_masked():
+    text, reps = apply_regex("東京都在住")
+    assert "[住所]" not in text
+
+
 # --- エッジケース ---
 
 def test_empty_string():

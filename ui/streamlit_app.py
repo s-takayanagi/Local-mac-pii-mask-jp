@@ -161,7 +161,9 @@ def run_masking(folder: str, model: str, enabled_layers: set[str], excluded_tags
     # 置換ログとシステムログをそれぞれ独立したコンテナで表示
     live_replacement_container = st.empty()
     st.markdown("#### システムログ")
-    sys_log_container = st.empty()
+    sys_log_outer = st.container(height=250)
+    with sys_log_outer:
+        sys_log_container = st.empty()
     st.session_state["_log_display_container"] = sys_log_container
 
     results = []
@@ -221,6 +223,8 @@ def main() -> None:
     st.set_page_config(page_title="PII Masker", layout="wide")
     st.title("PII Masker")
 
+    result_top = st.empty()
+
     with st.sidebar:
         st.header("設定")
         lm_status = check_lm_studio_connection()
@@ -270,6 +274,7 @@ def main() -> None:
         st.warning("Layer 3 / Layer 4 が有効なため、LM Studio に接続できないとマスキングを開始できません。")
 
     if st.button("マスキング開始", disabled=not can_start):
+        result_top.empty()
         st.session_state["done"] = False
         st.session_state["all_log_entries"] = []
         st.session_state["system_logs"] = []
@@ -284,15 +289,15 @@ def main() -> None:
         has_warnings = any(r.get("warnings") for r in results)
 
         if has_errors:
-            st.warning(
+            result_top.warning(
                 f"処理完了: {len(results)} ファイル / 合計 {total} 件置換（一部エラーあり）"
             )
         elif has_warnings:
-            st.warning(
+            result_top.warning(
                 f"処理完了: {len(results)} ファイル / 合計 {total} 件置換（要確認項目あり）"
             )
         else:
-            st.success(f"処理完了: {len(results)} ファイル / 合計 {total} 件置換")
+            result_top.success(f"処理完了: {len(results)} ファイル / 合計 {total} 件置換")
 
         st.markdown("---")
 

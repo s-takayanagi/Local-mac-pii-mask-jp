@@ -33,7 +33,10 @@ def _load_nlp():
     if _nlp is None:
         import spacy
         try:
-            _nlp = spacy.load("ja_ginza_electra")
+            _nlp = spacy.load(
+                "ja_ginza_electra",
+                config={"components": {"compound_splitter": {"split_mode": "C"}}},
+            )
         except OSError as e:
             logger.error("NER モデル (ja_ginza_electra) のロードに失敗: %s", e)
             raise RuntimeError(

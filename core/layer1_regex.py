@@ -4,11 +4,12 @@ import re
 _PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"0[789]0[-−]\d{4}[-−]\d{4}"), "[電話番号]"),
     (re.compile(r"0\d{1,4}[-−]\d{2,4}[-−]\d{3,4}"), "[電話番号]"),
-    (re.compile(r"[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}"), "[メール]"),
+    # .co.jp 形式のサブドメインを含むメールアドレスに対応
+    (re.compile(r"[\w.+-]+@[\w-]+\.(?:[a-zA-Z]{2,}\.)*[a-zA-Z]{2,}"), "[メール]"),
     (re.compile(r"\d{3}[-−]\d{4}"), "[郵便番号]"),
-    (re.compile(r"\d{4}年\s*\d{1,2}月\s*\d{1,2}日"), "[生年月日]"),
     (re.compile(r"(?<!\d)\d{12}(?!\d)"), "[識別番号]"),
-    (re.compile(r"https?://\S+"), "[URL]"),
+    # 全角文字・日本語句読点・全角括弧を含まない範囲でURLを捕捉
+    (re.compile(r"https?://[^\s\u3000-\u9fff\uff00-\uffef]+"), "[URL]"),
 ]
 
 

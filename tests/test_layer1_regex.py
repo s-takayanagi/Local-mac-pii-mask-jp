@@ -33,7 +33,7 @@ def test_combined():
     assert len(reps) >= 2
 
 
-# --- 追加テストケース ---
+# --- 電話番号 ---
 
 def test_phone_landline():
     text, reps = apply_regex("03-1234-5678")
@@ -46,16 +46,26 @@ def test_phone_fullwidth_hyphen():
     assert "[電話番号]" in text
 
 
-def test_birth_date():
-    text, reps = apply_regex("1990年3月15日")
-    assert text == "[生年月日]"
-    assert reps[0]["tag"] == "[生年月日]"
+# --- メールアドレス (.co.jp 形式) ---
+
+def test_email_co_jp():
+    text, reps = apply_regex("ito.seiichi@alpha-sys.co.jp")
+    assert text == "[メール]"
+    assert reps[0]["original"] == "ito.seiichi@alpha-sys.co.jp"
 
 
-def test_birth_date_with_spaces():
-    text, reps = apply_regex("1990年 3月 15日")
-    assert "[生年月日]" in text
+def test_email_co_jp_in_sentence():
+    text, _ = apply_regex("連絡先: yamada.taro@example-corp.co.jp まで")
+    assert "[メール]" in text
+    assert ".co.jp" not in text
 
+
+def test_email_standard_domain():
+    text, _ = apply_regex("test@example.com")
+    assert text == "[メール]"
+
+
+# --- 識別番号 ---
 
 def test_12digit_id():
     text, reps = apply_regex("123456789012")
@@ -73,6 +83,39 @@ def test_13digit_not_masked():
     assert "[識別番号]" not in text
 
 
+# --- 生年月日パターン削除の確認 ---
+
+def test_date_not_masked():
+    """生年月日タグ廃止後は日付がマスクされない"""
+    text, reps = apply_regex("1990年3月15日")
+    assert "[生年月日]" not in text
+    assert text == "1990年3月15日"
+    assert reps == []
+
+
+def test_meeting_date_not_masked():
+    text, reps = apply_regex("2024年10月15日の会議")
+    assert "[生年月日]" not in text
+    assert reps == []
+
+
+# --- URL（全角文字で打ち切り） ---
+
+def test_url_stops_at_fullwidth_char():
+    text, reps = apply_regex("利用規約（https://example.com/terms）に同意")
+    assert "[URL]" in text
+    # 全角括弧や日本語がマスク範囲に含まれないこと
+    assert "）" not in reps[0]["original"]
+    assert "に同意" not in reps[0]["original"]
+
+
+def test_url_ascii_only():
+    text, _ = apply_regex("https://example.com/path?q=1&page=2")
+    assert text == "[URL]"
+
+
+# --- excluded_tags ---
+
 def test_excluded_tags_phone():
     # 電話番号タグが除外されても他のパターン（郵便番号等）は動作するため、
     # [電話番号] タグが付与されないことのみ検証する
@@ -86,6 +129,8 @@ def test_excluded_tags_email():
     assert "[メール]" not in text
     assert "test@example.com" in text
 
+
+# --- エッジケース ---
 
 def test_empty_string():
     text, reps = apply_regex("")

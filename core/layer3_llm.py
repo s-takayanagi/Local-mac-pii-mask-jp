@@ -62,6 +62,8 @@ def _call_lm_studio(
         "[LM Studio] %s リクエスト | model=%s | url=%s | プロンプト文字数=%d",
         role, model, url, prompt_chars,
     )
+    logger.debug("[LM Studio] %s システムプロンプト:\n%s", role, system)
+    logger.debug("[LM Studio] %s 入力テキスト:\n%s", role, user)
 
     start = time.monotonic()
     try:
@@ -87,7 +89,7 @@ def _call_lm_studio(
             )
 
         raw = raw_json["choices"][0]["message"]["content"]
-        logger.debug("[LM Studio] %s 生レスポンス | %s", role, raw[:300])
+        logger.debug("[LM Studio] %s 生レスポンス:\n%s", role, raw)
 
         clean = raw.strip().removeprefix("```json").removesuffix("```").strip()
         start_idx, end_idx = clean.find("{"), clean.rfind("}") + 1

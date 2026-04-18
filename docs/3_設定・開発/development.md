@@ -90,15 +90,15 @@ docker run --rm -v "$(pwd)":/app -w /app --entrypoint "" pii-masker \
 **Layer 1 — 正規表現** (`test_layer1_regex.py`)
 - 携帯電話番号（`090-XXXX-XXXX`）・固定電話番号（`03-XXXX-XXXX`）
 - 全角ハイフンの電話番号（`090−XXXX−XXXX`）
-- メールアドレス・郵便番号（`〒` あり／なし）・URL
-- 生年月日（`YYYY年M月D日`、スペース含む）
+- メールアドレス（`.co.jp` 形式を含む）・郵便番号（`〒` あり／なし）・URL
 - 12桁識別番号（11桁・13桁は非マスク）
 - `excluded_tags` による除外・空文字列・複合パターン
 
 **Layer 2 — NER** (`test_layer2_ner.py`)
 - `Person`/`PERSON` → `[氏名]`、`Organization`/`Company` → `[会社名]`
 - `Address`/`City`/`Province` → `[住所]`
-- 都道府県名（行政区画）は非マスク
+- 都道府県名のみ（行政区画）は非マスク、フル住所はマスク対象
+- `@` を含まないエンティティを `[メール]` と誤分類しないこと
 - `excluded_tags` による除外・未知ラベルの無視
 - `_is_admin_unit()` の単体テスト
 

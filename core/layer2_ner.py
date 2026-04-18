@@ -46,7 +46,15 @@ def _load_nlp():
 
 
 def _is_admin_unit(text: str) -> bool:
-    return any(text.startswith(p) for p in _ADMIN_PREFIXES)
+    """都道府県名のみの場合にTrueを返す。番地・区市町村名が続く住所はFalseとする。"""
+    for prefix in _ADMIN_PREFIXES:
+        if not text.startswith(prefix):
+            continue
+        remainder = text[len(prefix):]
+        # prefix のみ、または「都」「府」「県」「道」だけが続く場合のみ行政区画とみなす
+        if remainder == "" or remainder in ("都", "府", "県", "道"):
+            return True
+    return False
 
 
 def apply_ner(text: str, excluded_tags: set[str] | None = None) -> tuple[str, list[dict]]:
@@ -63,6 +71,10 @@ def apply_ner(text: str, excluded_tags: set[str] | None = None) -> tuple[str, li
         if tag in excluded:
             continue
         if _is_admin_unit(ent.text):
+            continue
+        # NER が [メール] と判定しても @ を含まない場合は誤検知として除外
+        if tag == "[メール]" and "@" not in ent.text:
+            logger.debug("[Layer 2] [メール] 誤検知を除外: '%s'", ent.text)
             continue
         spans.append((ent.start_char, ent.end_char, tag))
         replacements.append({"original": ent.text, "tag": tag})

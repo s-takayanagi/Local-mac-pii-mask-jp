@@ -38,21 +38,22 @@ class SessionStateLogHandler(logging.Handler):
             pass
 
 
-def install(root_loggers: list[str] | None = None) -> SessionStateLogHandler:
-    """Attach the handler to the given logger names (default: root + app loggers)."""
+def install() -> SessionStateLogHandler:
+    """Attach the handler to the root logger only (child loggers propagate up)."""
     import streamlit as st
     st.session_state[SessionStateLogHandler.SESSION_KEY] = []
 
-    handler = SessionStateLogHandler()
+    root = logging.getLogger()
+    # Remove existing SessionStateLogHandler instances to avoid duplicates on re-run
+    for h in root.handlers[:]:
+        if isinstance(h, SessionStateLogHandler):
+            root.removeHandler(h)
 
-    targets = root_loggers or ["", "core", "file_handlers", "ui"]
-    for name in targets:
-        logging.getLogger(name).addHandler(handler)
+    handler = SessionStateLogHandler()
+    root.addHandler(handler)
 
     return handler
 
 
-def uninstall(handler: SessionStateLogHandler, root_loggers: list[str] | None = None) -> None:
-    targets = root_loggers or ["", "core", "file_handlers", "ui"]
-    for name in targets:
-        logging.getLogger(name).removeHandler(handler)
+def uninstall(handler: SessionStateLogHandler) -> None:
+    logging.getLogger().removeHandler(handler)

@@ -57,8 +57,7 @@ _LFM2_TAG_MAP: dict[str, str] = {
 
 
 def _is_lfm2_model(model: str) -> bool:
-    lower = model.lower()
-    return "lfm2" in lower or "pii-extract" in lower
+    return "lfm2" in model.lower()
 
 
 def _apply_lfm2_entities(

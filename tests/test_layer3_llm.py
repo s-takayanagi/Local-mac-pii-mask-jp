@@ -186,12 +186,13 @@ def test_call_reviewer_additional_none_causes_error():
 def test_is_lfm2_model_detected():
     assert _is_lfm2_model("lfm2-350m-pii-extract-jp") is True
     assert _is_lfm2_model("LFM2-350M-PII-Extract-JP") is True
-    assert _is_lfm2_model("pii-extract-custom") is True
+    assert _is_lfm2_model("LFM2-1B-PII-Extract-JP") is True
 
 
 def test_is_lfm2_model_not_detected():
     assert _is_lfm2_model("qwen2.5-7b-instruct") is False
     assert _is_lfm2_model("gpt-4o") is False
+    assert _is_lfm2_model("pii-extract-custom") is False
 
 
 def test_apply_lfm2_entities_masks_correctly():

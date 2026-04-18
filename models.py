@@ -35,4 +35,6 @@ class ProcessResult:
     replacements_log: list[dict] = field(default_factory=list)
     # each entry: {"location": str, "original": str, "tag": str, "layer": str}
     warnings: list[str] = field(default_factory=list)
-    # 未マスクの可能性がある箇所の警告メッセージ
+    # 未マスクの可能性がある箇所の警告メッセージ。
+    # 現状は docx_handler のみが生成（氏名/ふりがなラベル隣セルの未マスク検出）。
+    # xlsx / pptx では常に空配列。

@@ -14,6 +14,10 @@ MASKER_SYSTEM = """\
 - 住所（都道府県〜番地・号室）       → [住所]
 - 会社名・組織名（固有名詞）         → [会社名]
 - 社員番号・顧客番号                 → [識別番号]
+- 電話番号（前段で見逃された場合）   → [電話番号]
+- メールアドレス（同上）             → [メール]
+- 郵便番号（同上）                   → [郵便番号]
+- URL（同上）                         → [URL]
 - その他個人を特定できる固有情報     → [個人情報]
 
 ルール:
@@ -27,11 +31,12 @@ MASKER_SYSTEM = """\
 
 REVIEWER_SYSTEM = """\
 あなたは個人情報マスキングの品質レビュアーAIです。
-「原文」と「マスク済みテキスト」の両方を受け取り、以下の2点を確認します。
+「原文」と「マスク済みテキスト」を受け取り、以下の2点を確認します。
 
 入力フォーマット:
-【原文】に元のテキスト、【マスク済みテキスト】にLayer1-3でマスク済みのテキストが含まれます。
-原文を参照することで、残存PII の検出と過検出の判断を正確に行ってください。
+入力は必ず【原文】と【マスク済みテキスト】の2セクションで渡されます。
+前段でマスクが発生しなかった場合は両者が同一になることがありますが、その場合も
+フォーマットは変わりません。
 
 確認ポイント:
 1. マスク済みテキストに残存している人名（日本語・英語）・住所の断片・会社名
@@ -67,8 +72,8 @@ def _apply_lfm2_entities(
     text: str, raw: dict, excluded_tags: set[str]
 ) -> tuple[str, list[dict]]:
     """LFM2 形式 {"human_name": [...], ...} をテキストに適用して replacements を返す"""
-    replacements: list[dict] = []
-    masked = text
+    # 長い文字列から先に処理して、部分文字列との競合（例: "田中" が "田中太郎" を壊す）を防ぐ
+    pending: list[tuple[str, str]] = []
     for key, tag in _LFM2_TAG_MAP.items():
         if tag in excluded_tags:
             continue
@@ -76,11 +81,19 @@ def _apply_lfm2_entities(
         if not isinstance(entities, list):
             continue
         for entity in entities:
-            if not isinstance(entity, str) or not entity:
-                continue
-            if entity in masked:
-                masked = masked.replace(entity, tag, 1)
-                replacements.append({"original": entity, "tag": tag})
+            if isinstance(entity, str) and entity:
+                pending.append((entity, tag))
+    pending.sort(key=lambda x: len(x[0]), reverse=True)
+
+    replacements: list[dict] = []
+    masked = text
+    for entity, tag in pending:
+        occurrences = masked.count(entity)
+        if occurrences == 0:
+            continue
+        masked = masked.replace(entity, tag)
+        for _ in range(occurrences):
+            replacements.append({"original": entity, "tag": tag})
     return masked, replacements
 
 
@@ -132,10 +145,27 @@ def _call_lm_studio(
         logger.debug("[LM Studio] %s 生レスポンス:\n%s", role, raw)
 
         clean = raw.strip().removeprefix("```json").removesuffix("```").strip()
-        start_idx, end_idx = clean.find("{"), clean.rfind("}") + 1
+        start_idx = clean.find("{")
+        end_idx = clean.rfind("}") + 1
+        if start_idx == -1 or end_idx <= start_idx:
+            logger.error(
+                "[LM Studio] %s JSON境界検出失敗 | raw先頭200文字: %s",
+                role, raw[:200],
+            )
+            return None
         result = json.loads(clean[start_idx:end_idx])
 
-        rep_count = len(result.get("replacements", result.get("additional", [])))
+        # 標準スキーマ (Masker: replacements / Reviewer: additional) と
+        # LFM2 スキーマ（human_name / address 等の配列）の両方に対応してログ件数を算出
+        if isinstance(result.get("replacements"), list):
+            rep_count = len(result["replacements"])
+        elif isinstance(result.get("additional"), list):
+            rep_count = len(result["additional"])
+        else:
+            rep_count = sum(
+                len(v) for k, v in result.items()
+                if k in _LFM2_TAG_MAP and isinstance(v, list)
+            )
         logger.info("[LM Studio] %s パース完了 | 検出件数=%d", role, rep_count)
 
         return result
@@ -167,16 +197,39 @@ def _call_lm_studio(
         return None
 
 
-def _revert_excluded(text: str, replacements: list[dict], excluded_tags: set[str]) -> tuple[str, list[dict]]:
-    kept = []
-    reverted = text
+def _revert_excluded(
+    text: str,
+    replacements: list[dict],
+    excluded_tags: set[str],
+    reference_text: str | None = None,
+) -> tuple[str, list[dict]]:
+    """excluded_tags に該当する置換を text 内で元の文字列に戻す。
+
+    同じタグが複数回現れる場合、replacements の順序に依存すると誤対応になるため、
+    reference_text（マスク前テキスト）が渡されたときは original の出現位置順で
+    ソートし、text 内の [タグ] を左から順に対応する original に置換する。
+    """
+    kept: list[dict] = []
+    to_revert_by_tag: dict[str, list[str]] = {}
     for r in replacements:
         tag = r.get("tag", "")
         original = r.get("original", "")
         if tag in excluded_tags and original and tag:
-            reverted = reverted.replace(tag, original, 1)
+            to_revert_by_tag.setdefault(tag, []).append(original)
         else:
             kept.append(r)
+
+    if reference_text:
+        for tag, originals in to_revert_by_tag.items():
+            originals.sort(
+                key=lambda o: reference_text.find(o) if o in reference_text else len(reference_text)
+            )
+
+    reverted = text
+    for tag, originals in to_revert_by_tag.items():
+        for original in originals:
+            if tag in reverted:
+                reverted = reverted.replace(tag, original, 1)
     return reverted, kept
 
 
@@ -200,7 +253,7 @@ def call_masker(text: str, model: str, url: str, excluded_tags: set[str] | None 
     masked = result.get("masked_text", text)
     if not isinstance(masked, str) or not masked:
         masked = text
-    reverted, kept = _revert_excluded(masked, reps, excluded_tags)
+    reverted, kept = _revert_excluded(masked, reps, excluded_tags, reference_text=text)
     result["masked_text"] = reverted
     result["replacements"] = kept
     return result
@@ -223,10 +276,10 @@ def call_reviewer(
         final, additional = _apply_lfm2_entities(masked_text, raw, excluded)
         return {"final_text": final, "additional": additional, "confidence": 0.95}
 
-    if original_text and original_text != masked_text:
-        user_message = f"【原文】\n{original_text}\n\n【マスク済みテキスト】\n{masked_text}"
-    else:
-        user_message = masked_text
+    # プロンプト側の入力フォーマットと揃えるため、original_text が無くても
+    # 常に【原文】/【マスク済みテキスト】の2セクション形式で送る
+    source = original_text if original_text is not None else masked_text
+    user_message = f"【原文】\n{source}\n\n【マスク済みテキスト】\n{masked_text}"
 
     result = _call_lm_studio(REVIEWER_SYSTEM, user_message, url, model, role="Layer4 Reviewer")
     if result is None or not excluded_tags:
@@ -237,7 +290,8 @@ def call_reviewer(
     final = result.get("final_text", masked_text)
     if not isinstance(final, str) or not final:
         final = masked_text
-    reverted, kept = _revert_excluded(final, additional, excluded_tags)
+    # Reviewer は masked_text を読んで追加検出するため、位置参照は masked_text を使う
+    reverted, kept = _revert_excluded(final, additional, excluded_tags, reference_text=masked_text)
     result["final_text"] = reverted
     result["additional"] = kept
     return result

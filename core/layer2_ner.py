@@ -1,4 +1,7 @@
 from __future__ import annotations
+import logging
+
+logger = logging.getLogger(__name__)
 
 _nlp = None
 
@@ -29,7 +32,13 @@ def _load_nlp():
     global _nlp
     if _nlp is None:
         import spacy
-        _nlp = spacy.load("ja_ginza_electra")
+        try:
+            _nlp = spacy.load("ja_ginza_electra")
+        except OSError as e:
+            logger.error("NER モデル (ja_ginza_electra) のロードに失敗: %s", e)
+            raise RuntimeError(
+                f"NER モデルが見つかりません。`python -m spacy download ja_ginza_electra` を実行してください。({e})"
+            ) from e
     return _nlp
 
 

@@ -1,5 +1,8 @@
 import json
+import logging
 import requests
+
+logger = logging.getLogger(__name__)
 
 MASKER_SYSTEM = """\
 あなたは日本語文書の個人情報マスキング専門AIです。
@@ -57,7 +60,14 @@ def _call_lm_studio(system: str, user: str, url: str, model: str, timeout: int =
         clean = raw.strip().removeprefix("```json").removesuffix("```").strip()
         start, end = clean.find("{"), clean.rfind("}") + 1
         return json.loads(clean[start:end])
-    except Exception:
+    except requests.exceptions.ConnectionError as e:
+        logger.error("LM Studio connection failed (%s): %s", url, e)
+        return None
+    except requests.exceptions.HTTPError as e:
+        logger.error("LM Studio HTTP error (model=%s): %s – %s", model, e, getattr(e.response, "text", ""))
+        return None
+    except Exception as e:
+        logger.error("LM Studio call failed: %s", e)
         return None
 
 

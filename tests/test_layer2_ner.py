@@ -37,12 +37,21 @@ def test_is_admin_unit_tokyo():
 
 
 def test_is_admin_unit_osaka():
-    # "大阪" が ADMIN_PREFIXES に含まれるため "大阪府" もマッチする
     assert _is_admin_unit("大阪府") is True
 
 
 def test_is_admin_unit_osaka_prefix():
     assert _is_admin_unit("大阪") is True
+
+
+def test_is_admin_unit_full_address_not_filtered():
+    # 都道府県名で始まっても番地が続く場合は行政区画ではない
+    assert _is_admin_unit("東京都渋谷区1-2-3") is False
+
+
+def test_is_admin_unit_osaka_city_not_filtered():
+    # 大阪府大阪市は行政区画としてフィルタされない
+    assert _is_admin_unit("大阪府大阪市北区") is False
 
 
 def test_is_admin_unit_hokkaido():
@@ -169,3 +178,21 @@ def test_replacement_log_has_original():
     with _patch_nlp(ent):
         _, reps = apply_ner("山田太郎です")
     assert reps[0]["original"] == "山田太郎"
+
+
+def test_email_label_without_at_not_masked():
+    # Email ラベルでも @ を含まない場合は誤検知として [メール] タグを付与しない
+    ent = _MockEnt("CON-2024-001", "Email", 0, 12)
+    with _patch_nlp(ent):
+        text, reps = apply_ner("CON-2024-001は契約番号です")
+    assert "[メール]" not in text
+    assert reps == []
+
+
+def test_full_address_starting_with_prefecture_masked():
+    # 都道府県名で始まるフル住所は行政区画として除外されずマスクされる
+    ent = _MockEnt("東京都渋谷区1-2-3", "Address", 0, 9)
+    with _patch_nlp(ent):
+        text, reps = apply_ner("東京都渋谷区1-2-3在住")
+    assert "[住所]" in text
+    assert any(r["tag"] == "[住所]" for r in reps)

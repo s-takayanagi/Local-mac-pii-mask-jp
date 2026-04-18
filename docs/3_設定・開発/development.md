@@ -64,13 +64,13 @@ docker run --rm -v "$(pwd)":/app -w /app --entrypoint "" pii-masker \
   sh -c "pip install pytest && python -m pytest tests/test_layer1_regex.py -v"
 ```
 
-### テスト構成（合計 100 tests）
+### テスト構成（合計 122 tests）
 
 | ファイル | テスト数 | 対象モジュール |
 |---------|---------|--------------|
 | `tests/test_layer1_regex.py` | 18 | `core/layer1_regex.py` |
 | `tests/test_layer2_ner.py` | 19 | `core/layer2_ner.py` |
-| `tests/test_layer3_llm.py` | 13 | `core/layer3_llm.py` |
+| `tests/test_layer3_llm.py` | 23 | `core/layer3_llm.py`（LFM2・`_revert_excluded` 含む） |
 | `tests/test_pipeline.py` | 13 | `core/pipeline.py` |
 | `tests/test_file_handlers.py` | 22 | `file_handlers/` |
 | `tests/test_ui.py` | 15 | `ui/streamlit_app.py` |
@@ -105,7 +105,9 @@ docker run --rm -v "$(pwd)":/app -w /app --entrypoint "" pii-masker \
 **Layer 3/4 — LLM** (`test_layer3_llm.py`)
 - 正常レスポンス・`excluded_tags` による revert 処理
 - `ConnectionError`・`Timeout`・`HTTPError`・不正 JSON の各エラーハンドリング
-- `_revert_excluded()` の単体テスト
+- `_revert_excluded()` の単体テスト（`reference_text` による順序保証含む）
+- LFM2 モード: `_is_lfm2_model()`・`_apply_lfm2_entities()`・`call_masker/call_reviewer` の LFM2 パス
+- LFM2 部分文字列競合（長さ降順ソート）・複数出現の全置換
 
 **パイプライン** (`test_pipeline.py`)
 - 空文字列・1文字・空白のみの早期リターン

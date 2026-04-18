@@ -38,6 +38,19 @@
 
 ---
 
+## LFM2-350M-PII-Extract-JP 専用モード
+
+LM Studio で LFM2-350M-PII-Extract-JP モデルを選択すると、専用モードで動作します。
+
+| 項目 | 汎用 LLM モード | LFM2 専用モード |
+|------|--------------|----------------|
+| システムプロンプト | MASKER_SYSTEM / REVIEWER_SYSTEM | `Extract <address>, <company_name>, ...` |
+| 出力形式 | `{"masked_text": ..., "replacements": [...]}` | `{"human_name": [...], "address": [...], ...}` |
+| temperature | 0.05 | 0（greedy decoding） |
+| ライセンス | 各モデルに依存 | LFM Open License v1.0（$10M以上の企業は要確認） |
+
+---
+
 ## システム全体像
 
 ```
@@ -49,7 +62,7 @@
 │       ├── Streamlit UI（ポート 8501）
 │       └── MCP サーバー（stdio）
 └── LM Studio（別アプリ、ポート 1234）
-    └── Qwen2.5-7B-Instruct モデル
+    └── 任意モデル（Qwen2.5-7B 等 / LFM2-350M-PII-Extract-JP 等）
 ```
 
 ---

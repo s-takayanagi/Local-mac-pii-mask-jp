@@ -21,7 +21,7 @@ def _iter_shapes(shapes):
 
 
 def _mask_text_frame(
-    tf, model: str, url: str, enabled_layers: set[str] | None = None
+    tf, model: str, url: str, enabled_layers: set[str] | None = None, excluded_tags: set[str] | None = None
 ) -> tuple[int, dict, list[str], list[dict]]:
     total = 0
     layer_totals: dict = {}
@@ -31,7 +31,7 @@ def _mask_text_frame(
         for run in para.runs:
             if not run.text or len(run.text.strip()) <= 1:
                 continue
-            result = mask_text(run.text, model, url, enabled_layers)
+            result = mask_text(run.text, model, url, enabled_layers, excluded_tags)
             run.text = result.final_text
             total += len(result.replacements)
             _merge_layer_counts(layer_totals, result.layer_counts)
@@ -41,7 +41,7 @@ def _mask_text_frame(
     return total, layer_totals, errors, reps
 
 
-def process_pptx(path: Path, model: str, lm_studio_url: str, enabled_layers: set[str] | None = None) -> ProcessResult:
+def process_pptx(path: Path, model: str, lm_studio_url: str, enabled_layers: set[str] | None = None, excluded_tags: set[str] | None = None) -> ProcessResult:
     output = masked_output_path(path)
     shutil.copy2(path, output)
 
@@ -55,7 +55,7 @@ def process_pptx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
         for shape in _iter_shapes(slide.shapes):
             try:
                 if shape.has_text_frame:
-                    count, lc, errs, reps = _mask_text_frame(shape.text_frame, model, lm_studio_url, enabled_layers)
+                    count, lc, errs, reps = _mask_text_frame(shape.text_frame, model, lm_studio_url, enabled_layers, excluded_tags)
                     total += count
                     _merge_layer_counts(layer_totals, lc)
                     errors.extend(errs)
@@ -67,7 +67,7 @@ def process_pptx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
                     for r in range(len(tbl.rows)):
                         for c in range(len(tbl.columns)):
                             count, lc, errs, reps = _mask_text_frame(
-                                tbl.cell(r, c).text_frame, model, lm_studio_url, enabled_layers
+                                tbl.cell(r, c).text_frame, model, lm_studio_url, enabled_layers, excluded_tags
                             )
                             total += count
                             _merge_layer_counts(layer_totals, lc)

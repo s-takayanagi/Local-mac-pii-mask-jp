@@ -125,9 +125,46 @@ def _call_lm_studio(
         return None
 
 
-def call_masker(text: str, model: str, url: str) -> dict | None:
-    return _call_lm_studio(MASKER_SYSTEM, text, url, model, role="Layer3 Masker")
+def _revert_excluded(text: str, replacements: list[dict], excluded_tags: set[str]) -> tuple[str, list[dict]]:
+    kept = []
+    reverted = text
+    for r in replacements:
+        tag = r.get("tag", "")
+        original = r.get("original", "")
+        if tag in excluded_tags and original and tag:
+            reverted = reverted.replace(tag, original, 1)
+        else:
+            kept.append(r)
+    return reverted, kept
 
 
-def call_reviewer(masked_text: str, model: str, url: str) -> dict | None:
-    return _call_lm_studio(REVIEWER_SYSTEM, masked_text, url, model, role="Layer4 Reviewer")
+def call_masker(text: str, model: str, url: str, excluded_tags: set[str] | None = None) -> dict | None:
+    result = _call_lm_studio(MASKER_SYSTEM, text, url, model, role="Layer3 Masker")
+    if result is None or not excluded_tags:
+        return result
+    reps = result.get("replacements", [])
+    if not isinstance(reps, list):
+        reps = []
+    masked = result.get("masked_text", text)
+    if not isinstance(masked, str) or not masked:
+        masked = text
+    reverted, kept = _revert_excluded(masked, reps, excluded_tags)
+    result["masked_text"] = reverted
+    result["replacements"] = kept
+    return result
+
+
+def call_reviewer(masked_text: str, model: str, url: str, excluded_tags: set[str] | None = None) -> dict | None:
+    result = _call_lm_studio(REVIEWER_SYSTEM, masked_text, url, model, role="Layer4 Reviewer")
+    if result is None or not excluded_tags:
+        return result
+    additional = result.get("additional", [])
+    if not isinstance(additional, list):
+        additional = []
+    final = result.get("final_text", masked_text)
+    if not isinstance(final, str) or not final:
+        final = masked_text
+    reverted, kept = _revert_excluded(final, additional, excluded_tags)
+    result["final_text"] = reverted
+    result["additional"] = kept
+    return result

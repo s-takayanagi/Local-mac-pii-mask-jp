@@ -12,10 +12,13 @@ _PATTERNS: list[tuple[re.Pattern, str]] = [
 ]
 
 
-def apply_regex(text: str) -> tuple[str, list[dict]]:
+def apply_regex(text: str, excluded_tags: set[str] | None = None) -> tuple[str, list[dict]]:
+    excluded = excluded_tags or set()
     replacements: list[dict] = []
     result = text
     for pattern, tag in _PATTERNS:
+        if tag in excluded:
+            continue
         for m in pattern.finditer(result):
             replacements.append({"original": m.group(), "tag": tag})
         result = pattern.sub(tag, result)

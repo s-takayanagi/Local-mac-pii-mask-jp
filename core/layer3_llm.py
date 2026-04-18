@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 import requests
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,9 @@ REVIEWER_SYSTEM = """\
 """
 
 
-def _call_lm_studio(system: str, user: str, url: str, model: str, timeout: int = 120) -> dict | None:
+def _call_lm_studio(
+    system: str, user: str, url: str, model: str, role: str, timeout: int = 120
+) -> dict | None:
     payload = {
         "model": model,
         "messages": [
@@ -53,27 +56,78 @@ def _call_lm_studio(system: str, user: str, url: str, model: str, timeout: int =
         "temperature": 0.05,
         "max_tokens": 4096,
     }
+
+    prompt_chars = len(system) + len(user)
+    logger.info(
+        "[LM Studio] %s リクエスト | model=%s | url=%s | プロンプト文字数=%d",
+        role, model, url, prompt_chars,
+    )
+
+    start = time.monotonic()
     try:
         resp = requests.post(url, json=payload, timeout=timeout)
+        elapsed = time.monotonic() - start
+
+        logger.info(
+            "[LM Studio] %s レスポンス | HTTP %d | 経過時間=%.2fs",
+            role, resp.status_code, elapsed,
+        )
+
         resp.raise_for_status()
-        raw = resp.json()["choices"][0]["message"]["content"]
+        raw_json = resp.json()
+
+        usage = raw_json.get("usage", {})
+        if usage:
+            logger.info(
+                "[LM Studio] %s トークン使用量 | prompt=%s | completion=%s | total=%s",
+                role,
+                usage.get("prompt_tokens", "?"),
+                usage.get("completion_tokens", "?"),
+                usage.get("total_tokens", "?"),
+            )
+
+        raw = raw_json["choices"][0]["message"]["content"]
+        logger.debug("[LM Studio] %s 生レスポンス | %s", role, raw[:300])
+
         clean = raw.strip().removeprefix("```json").removesuffix("```").strip()
-        start, end = clean.find("{"), clean.rfind("}") + 1
-        return json.loads(clean[start:end])
+        start_idx, end_idx = clean.find("{"), clean.rfind("}") + 1
+        result = json.loads(clean[start_idx:end_idx])
+
+        rep_count = len(result.get("replacements", result.get("additional", [])))
+        logger.info("[LM Studio] %s パース完了 | 検出件数=%d", role, rep_count)
+
+        return result
+
     except requests.exceptions.ConnectionError as e:
-        logger.error("LM Studio connection failed (%s): %s", url, e)
+        elapsed = time.monotonic() - start
+        logger.error(
+            "[LM Studio] %s 接続エラー (%.2fs) | url=%s | %s", role, elapsed, url, e
+        )
+        return None
+    except requests.exceptions.Timeout:
+        elapsed = time.monotonic() - start
+        logger.error(
+            "[LM Studio] %s タイムアウト (%.2fs) | timeout=%ds", role, elapsed, timeout
+        )
         return None
     except requests.exceptions.HTTPError as e:
-        logger.error("LM Studio HTTP error (model=%s): %s – %s", model, e, getattr(e.response, "text", ""))
+        elapsed = time.monotonic() - start
+        logger.error(
+            "[LM Studio] %s HTTPエラー (%.2fs) | model=%s | %s | body=%s",
+            role, elapsed, model, e, getattr(e.response, "text", "")[:200],
+        )
+        return None
+    except json.JSONDecodeError as e:
+        logger.error("[LM Studio] %s JSONパースエラー | %s", role, e)
         return None
     except Exception as e:
-        logger.error("LM Studio call failed: %s", e)
+        logger.error("[LM Studio] %s 予期しないエラー | %s", role, e)
         return None
 
 
 def call_masker(text: str, model: str, url: str) -> dict | None:
-    return _call_lm_studio(MASKER_SYSTEM, text, url, model)
+    return _call_lm_studio(MASKER_SYSTEM, text, url, model, role="Layer3 Masker")
 
 
 def call_reviewer(masked_text: str, model: str, url: str) -> dict | None:
-    return _call_lm_studio(REVIEWER_SYSTEM, masked_text, url, model)
+    return _call_lm_studio(REVIEWER_SYSTEM, masked_text, url, model, role="Layer4 Reviewer")

@@ -1,14 +1,15 @@
+import logging
 import streamlit as st
 import requests
-import logging
 from pathlib import Path
 
-from config import LM_STUDIO_URL, DEFAULT_MODEL, SUPPORTED_EXTENSIONS, OUTPUT_SUFFIX
+from config import LM_STUDIO_URL, DEFAULT_MODEL, SUPPORTED_EXTENSIONS
 from file_handlers.xlsx_handler import process_xlsx
 from file_handlers.pptx_handler import process_pptx
 from file_handlers.docx_handler import process_docx
+from ui.log_handler import install as install_log_handler, uninstall as uninstall_log_handler
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 _HANDLERS = {".xlsx": process_xlsx, ".pptx": process_pptx, ".docx": process_docx}
 
@@ -18,6 +19,21 @@ _LAYER_INFO = [
     ("layer3", "Layer 3", "AI マスキング"),
     ("layer4", "Layer 4", "AI レビュー"),
 ]
+
+_LAYER_LABELS = {
+    "layer1": "Layer 1 正規表現",
+    "layer2": "Layer 2 固有名詞認識",
+    "layer3": "Layer 3 AI マスキング",
+    "layer4": "Layer 4 AI レビュー",
+}
+
+_LOG_LEVEL_ICON = {
+    "DEBUG": "🔍",
+    "INFO": "ℹ️",
+    "WARNING": "⚠️",
+    "ERROR": "❌",
+    "CRITICAL": "🔥",
+}
 
 
 def check_lm_studio_connection(url: str = LM_STUDIO_URL) -> dict:
@@ -58,6 +74,58 @@ def _render_layer_summary(layer_totals: dict) -> None:
                 st.metric(label=f"{num} {name}", value=f"{count}件")
 
 
+def _build_replacement_log_text(all_entries: list[dict]) -> str:
+    if not all_entries:
+        return "（置換なし）"
+    lines = ["=== PII マスキングログ ===", ""]
+    current_file = None
+    for entry in all_entries:
+        f = entry.get("file", "")
+        if f != current_file:
+            current_file = f
+            lines.append(f"[{f}]")
+        layer_label = _LAYER_LABELS.get(entry.get("layer", ""), entry.get("layer", ""))
+        orig = entry.get("original", "")
+        tag = entry.get("tag", "")
+        loc = entry.get("location", "")
+        lines.append(f'  {loc} | {layer_label} | "{orig}" → "{tag}"')
+    lines.append("")
+    lines.append(f"合計: {len(all_entries)} 件置換")
+    return "\n".join(lines)
+
+
+def _render_live_replacement_log(entries: list[dict], container) -> None:
+    if not entries:
+        return
+    with container:
+        st.markdown("#### リアルタイムログ")
+        rows = [
+            {
+                "ファイル": e.get("file", ""),
+                "場所": e.get("location", ""),
+                "レイヤー": _LAYER_LABELS.get(e.get("layer", ""), e.get("layer", "")),
+                "元テキスト": e.get("original", ""),
+                "置換後": e.get("tag", ""),
+            }
+            for e in entries[-50:]
+        ]
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+        if len(entries) > 50:
+            st.caption(f"最新50件を表示中（合計 {len(entries)} 件）")
+
+
+def _render_system_log(container, sys_logs: list[str], max_lines: int = 200) -> None:
+    with container:
+        if not sys_logs:
+            return
+        st.markdown("#### システムログ")
+        visible = sys_logs[-max_lines:]
+        text = "\n".join(visible)
+        st.code(text, language=None)
+        if len(sys_logs) > max_lines:
+            st.caption(f"最新 {max_lines} 行を表示中（合計 {len(sys_logs)} 行）")
+
+
 def run_masking(folder: str, model: str) -> None:
     folder_path = Path(folder)
     if not folder_path.is_dir():
@@ -72,15 +140,30 @@ def run_masking(folder: str, model: str) -> None:
         st.warning("対象ファイルが見つかりませんでした（xlsx / pptx / docx）")
         return
 
+    log_handler = install_log_handler()
+
     progress = st.progress(0.0, text="処理準備中...")
     status = st.empty()
+
+    # 置換ログとシステムログをそれぞれ独立したコンテナで表示
+    live_replacement_container = st.empty()
+    sys_log_container = st.empty()
+
     results = []
+    all_log_entries: list[dict] = []
 
     for i, f in enumerate(files):
         progress.progress(i / len(files), text=f"処理中 ({i + 1}/{len(files)}): {f.name}")
         status.info(f"⏳ **{f.name}** を処理しています…")
+
+        logging.getLogger(__name__).info("=== ファイル処理開始: %s ===", f.name)
         try:
             result = _HANDLERS[f.suffix.lower()](f, model, LM_STUDIO_URL)
+            file_entries = [{**r, "file": f.name} for r in result.replacements_log]
+            all_log_entries.extend(file_entries)
+            logging.getLogger(__name__).info(
+                "=== ファイル処理完了: %s | 置換=%d件 ===", f.name, result.total_replacements
+            )
             results.append({
                 "name": f.name,
                 "out": result.output_path.name,
@@ -88,8 +171,10 @@ def run_masking(folder: str, model: str) -> None:
                 "error": None,
                 "errors": result.errors,
                 "layer_totals": result.layer_totals,
+                "replacements_log": result.replacements_log,
             })
         except Exception as e:
+            logging.getLogger(__name__).error("ファイル処理エラー: %s | %s", f.name, e)
             results.append({
                 "name": f.name,
                 "out": None,
@@ -97,11 +182,23 @@ def run_masking(folder: str, model: str) -> None:
                 "error": str(e),
                 "errors": [],
                 "layer_totals": {},
+                "replacements_log": [],
             })
+
+        # ファイルごとに両ログを更新
+        _render_live_replacement_log(all_log_entries, live_replacement_container)
+        sys_logs = st.session_state.get("system_logs", [])
+        _render_system_log(sys_log_container, sys_logs)
 
     progress.progress(1.0, text="すべてのファイルの処理が完了しました")
     status.empty()
+    live_replacement_container.empty()
+    sys_log_container.empty()
+
+    uninstall_log_handler(log_handler)
+
     st.session_state["results"] = results
+    st.session_state["all_log_entries"] = all_log_entries
     st.session_state["done"] = True
 
 
@@ -138,10 +235,14 @@ def main() -> None:
 
     if st.button("マスキング開始", disabled=not can_start):
         st.session_state["done"] = False
+        st.session_state["all_log_entries"] = []
+        st.session_state["system_logs"] = []
         run_masking(folder, selected_model)
 
     if st.session_state.get("done"):
         results = st.session_state.get("results", [])
+        all_log_entries = st.session_state.get("all_log_entries", [])
+        system_logs = st.session_state.get("system_logs", [])
         total = sum(r["count"] for r in results)
         has_errors = any(r["error"] or r["errors"] for r in results)
 
@@ -153,6 +254,8 @@ def main() -> None:
             st.success(f"処理完了: {len(results)} ファイル / 合計 {total} 件置換")
 
         st.markdown("---")
+
+        # ファイルごとの詳細
         for r in results:
             icon = "✅" if not r["error"] and not r["errors"] else ("⚠️" if r["errors"] else "❌")
             header = f"{icon} {r['name']}"
@@ -170,6 +273,33 @@ def main() -> None:
                     st.markdown("**処理中エラー一覧**")
                     for err in r["errors"]:
                         st.warning(err)
+
+                if r["replacements_log"]:
+                    st.markdown("**置換詳細**")
+                    rows = [
+                        {
+                            "場所": e.get("location", ""),
+                            "レイヤー": _LAYER_LABELS.get(e.get("layer", ""), e.get("layer", "")),
+                            "元テキスト": e.get("original", ""),
+                            "置換後": e.get("tag", ""),
+                        }
+                        for e in r["replacements_log"]
+                    ]
+                    st.dataframe(rows, use_container_width=True, hide_index=True)
+
+        # 置換ログ（コピー用）
+        if all_log_entries:
+            st.markdown("---")
+            st.markdown("### 置換ログ（コピー用）")
+            st.code(_build_replacement_log_text(all_log_entries), language=None)
+
+        # システムログ（コピー用）
+        st.markdown("---")
+        with st.expander("🔧 システムログ（デバッグ用）", expanded=False):
+            if system_logs:
+                st.code("\n".join(system_logs), language=None)
+            else:
+                st.caption("ログなし")
 
 
 if __name__ == "__main__":

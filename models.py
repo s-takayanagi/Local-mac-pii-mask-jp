@@ -32,3 +32,5 @@ class ProcessResult:
     errors: list[str] = field(default_factory=list)
     layer_totals: dict = field(default_factory=dict)
     # keys: "layer1"〜"layer4" → ファイル全体の合計件数
+    replacements_log: list[dict] = field(default_factory=list)
+    # each entry: {"location": str, "original": str, "tag": str, "layer": str}

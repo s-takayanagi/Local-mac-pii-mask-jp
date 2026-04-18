@@ -20,6 +20,8 @@ def process_xlsx(path: Path, model: str, lm_studio_url: str) -> ProcessResult:
     errors: list[str] = []
     layer_totals: dict = {}
 
+    replacements_log: list[dict] = []
+
     for ws in wb.worksheets:
         for row in ws.iter_rows():
             for cell in row:
@@ -32,6 +34,9 @@ def process_xlsx(path: Path, model: str, lm_studio_url: str) -> ProcessResult:
                     _merge_layer_counts(layer_totals, result.layer_counts)
                     if result.error:
                         errors.append(f"{ws.title}!{cell.coordinate}: {result.error}")
+                    loc = f"{ws.title}!{cell.coordinate}"
+                    for r in result.replacements:
+                        replacements_log.append({**r, "location": loc})
                 except Exception as e:
                     errors.append(f"{ws.title}!{cell.coordinate}: {e}")
 
@@ -41,4 +46,5 @@ def process_xlsx(path: Path, model: str, lm_studio_url: str) -> ProcessResult:
         total_replacements=total,
         errors=errors,
         layer_totals=layer_totals,
+        replacements_log=replacements_log,
     )

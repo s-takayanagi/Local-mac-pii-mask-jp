@@ -6,6 +6,7 @@ class SessionStateLogHandler(logging.Handler):
     """Captures log records into st.session_state for real-time display in the UI."""
 
     SESSION_KEY = "system_logs"
+    CONTAINER_KEY = "_log_display_container"
 
     def __init__(self, level: int = logging.DEBUG) -> None:
         super().__init__(level)
@@ -18,6 +19,13 @@ class SessionStateLogHandler(logging.Handler):
             if self.SESSION_KEY not in st.session_state:
                 st.session_state[self.SESSION_KEY] = []
             st.session_state[self.SESSION_KEY].append(self.format(record))
+
+            container = st.session_state.get(self.CONTAINER_KEY)
+            if container is not None:
+                logs = st.session_state[self.SESSION_KEY]
+                visible = logs[-200:]
+                with container:
+                    st.code("\n".join(visible), language=None)
         except Exception:
             pass
 

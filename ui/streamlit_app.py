@@ -147,7 +147,9 @@ def run_masking(folder: str, model: str) -> None:
 
     # 置換ログとシステムログをそれぞれ独立したコンテナで表示
     live_replacement_container = st.empty()
+    st.markdown("#### システムログ")
     sys_log_container = st.empty()
+    st.session_state["_log_display_container"] = sys_log_container
 
     results = []
     all_log_entries: list[dict] = []
@@ -185,15 +187,13 @@ def run_masking(folder: str, model: str) -> None:
                 "replacements_log": [],
             })
 
-        # ファイルごとに両ログを更新
+        # ファイルごとに置換ログを更新（システムログはemitから自動更新）
         _render_live_replacement_log(all_log_entries, live_replacement_container)
-        sys_logs = st.session_state.get("system_logs", [])
-        _render_system_log(sys_log_container, sys_logs)
 
     progress.progress(1.0, text="すべてのファイルの処理が完了しました")
     status.empty()
     live_replacement_container.empty()
-    sys_log_container.empty()
+    st.session_state.pop("_log_display_container", None)
 
     uninstall_log_handler(log_handler)
 

@@ -63,6 +63,69 @@ _LFM2_TAG_MAP: dict[str, str] = {
     "phone_number": "[電話番号]",
 }
 
+# 汎用 LLM が返す replacements/additional のうち、ここに含まれるタグのみ許可する。
+# 汎用モデル（qwen 等）は括弧抜けタグ・他言語ラベル・メタコメント等を返すことがあるため、
+# ホワイトリスト外の出力は破棄し masked_text からも元の文字列に戻す。
+_VALID_TAGS: frozenset[str] = frozenset({
+    "[氏名]", "[住所]", "[会社名]", "[電話番号]",
+    "[メール]", "[郵便番号]", "[URL]", "[識別番号]", "[個人情報]",
+})
+
+
+def _sanitize_replacements(
+    text: str,
+    replacements: list[dict],
+    reference_text: str | None = None,
+) -> tuple[str, list[dict]]:
+    """汎用 LLM 出力から不正タグ・既マスク済み original を除外する。
+
+    除外対象:
+    - tag が _VALID_TAGS に含まれない（"氏名"・"公司名"・"overmasked" 等のノイズ）
+    - original が既に [タグ] 形式（モデルが括弧を剥がしただけの再処理ノイズ）
+
+    不正タグは text 内の [タグ] を元の original に戻してから破棄する。
+    """
+    valid: list[dict] = []
+    invalid_by_tag: dict[str, list[str]] = {}
+
+    for r in replacements:
+        if not isinstance(r, dict):
+            continue
+        tag = r.get("tag", "")
+        original = r.get("original", "")
+        if not isinstance(tag, str) or not isinstance(original, str):
+            continue
+        if not tag or not original:
+            continue
+        if original.startswith("[") and original.endswith("]") and len(original) > 2:
+            continue
+        if tag not in _VALID_TAGS:
+            invalid_by_tag.setdefault(tag, []).append(original)
+            continue
+        valid.append(r)
+
+    if not invalid_by_tag:
+        return text, valid
+
+    dropped = sum(len(v) for v in invalid_by_tag.values())
+    logger.info(
+        "[LM Studio] ホワイトリスト検証で %d 件の不正タグを破棄 | tags=%s",
+        dropped, sorted(invalid_by_tag.keys()),
+    )
+
+    if reference_text:
+        for tag, originals in invalid_by_tag.items():
+            originals.sort(
+                key=lambda o: reference_text.find(o) if o in reference_text else len(reference_text)
+            )
+
+    reverted = text
+    for tag, originals in invalid_by_tag.items():
+        for original in originals:
+            if tag in reverted:
+                reverted = reverted.replace(tag, original, 1)
+    return reverted, valid
+
 
 def _is_lfm2_model(model: str) -> bool:
     return "lfm2" in model.lower()
@@ -245,7 +308,7 @@ def call_masker(text: str, model: str, url: str, excluded_tags: set[str] | None 
         return {"masked_text": masked, "replacements": reps}
 
     result = _call_lm_studio(MASKER_SYSTEM, text, url, model, role="Layer3 Masker")
-    if result is None or not excluded_tags:
+    if result is None:
         return result
     reps = result.get("replacements", [])
     if not isinstance(reps, list):
@@ -253,9 +316,11 @@ def call_masker(text: str, model: str, url: str, excluded_tags: set[str] | None 
     masked = result.get("masked_text", text)
     if not isinstance(masked, str) or not masked:
         masked = text
-    reverted, kept = _revert_excluded(masked, reps, excluded_tags, reference_text=text)
-    result["masked_text"] = reverted
-    result["replacements"] = kept
+    masked, reps = _sanitize_replacements(masked, reps, reference_text=text)
+    if excluded_tags:
+        masked, reps = _revert_excluded(masked, reps, excluded_tags, reference_text=text)
+    result["masked_text"] = masked
+    result["replacements"] = reps
     return result
 
 
@@ -282,7 +347,7 @@ def call_reviewer(
     user_message = f"【原文】\n{source}\n\n【マスク済みテキスト】\n{masked_text}"
 
     result = _call_lm_studio(REVIEWER_SYSTEM, user_message, url, model, role="Layer4 Reviewer")
-    if result is None or not excluded_tags:
+    if result is None:
         return result
     additional = result.get("additional", [])
     if not isinstance(additional, list):
@@ -291,7 +356,9 @@ def call_reviewer(
     if not isinstance(final, str) or not final:
         final = masked_text
     # Reviewer は masked_text を読んで追加検出するため、位置参照は masked_text を使う
-    reverted, kept = _revert_excluded(final, additional, excluded_tags, reference_text=masked_text)
-    result["final_text"] = reverted
-    result["additional"] = kept
+    final, additional = _sanitize_replacements(final, additional, reference_text=masked_text)
+    if excluded_tags:
+        final, additional = _revert_excluded(final, additional, excluded_tags, reference_text=masked_text)
+    result["final_text"] = final
+    result["additional"] = additional
     return result

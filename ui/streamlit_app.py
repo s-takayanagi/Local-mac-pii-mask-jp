@@ -87,10 +87,53 @@ def _render_layer_summary(layer_totals: dict) -> None:
                 st.metric(label=f"{num} {name}", value=f"{count}件")
 
 
-def _build_replacement_log_text(all_entries: list[dict]) -> str:
+def _build_summary_section(results: list[dict], model: str | None = None) -> list[str]:
+    """ファイルごとの Layer 別検出件数・処理時間を整形して返す。"""
+    lines = ["=== 概要 ==="]
+    if model:
+        lines.append(f"モデル: {model}")
+    lines.append("")
+
+    total_count = 0
+    total_elapsed = 0.0
+    for r in results:
+        name = r.get("name", "")
+        layer_totals = r.get("layer_totals", {}) or {}
+        layer_elapsed = r.get("layer_elapsed", {}) or {}
+        file_count = int(r.get("count", 0) or 0)
+        file_elapsed = sum(float(v) for v in layer_elapsed.values())
+        total_count += file_count
+        total_elapsed += file_elapsed
+
+        lines.append(f"[{name}]")
+        for key, _num, label in _LAYER_INFO:
+            count = layer_totals.get(key)
+            elapsed = layer_elapsed.get(key)
+            count_str = f"{count}件" if count is not None else "—"
+            elapsed_str = f"{elapsed:.3f}s" if elapsed is not None else "—"
+            # 全レイヤーラベルを揃えるため固定幅で表示
+            layer_label = f"Layer {key[-1]} {label}"
+            lines.append(f"  {layer_label:<24} | 検出={count_str:>6} | 経過={elapsed_str:>9}")
+        lines.append(f"  小計: {file_count}件 / {file_elapsed:.3f}s")
+        lines.append("")
+
+    lines.append(f"全体合計: {total_count}件 / {total_elapsed:.3f}s")
+    lines.append("")
+    return lines
+
+
+def _build_replacement_log_text(
+    all_entries: list[dict],
+    results: list[dict] | None = None,
+    model: str | None = None,
+) -> str:
     if not all_entries:
         return "（置換なし）"
-    lines = ["=== PII マスキングログ ===", ""]
+    lines: list[str] = []
+    if results:
+        lines.extend(_build_summary_section(results, model=model))
+    lines.append("=== PII マスキングログ ===")
+    lines.append("")
     current_file = None
     for entry in all_entries:
         f = entry.get("file", "")
@@ -189,6 +232,7 @@ def run_masking(folder: str, model: str, enabled_layers: set[str], excluded_tags
                 "errors": result.errors,
                 "warnings": result.warnings,
                 "layer_totals": result.layer_totals,
+                "layer_elapsed": result.layer_elapsed,
                 "replacements_log": result.replacements_log,
             })
         except Exception as e:
@@ -201,6 +245,7 @@ def run_masking(folder: str, model: str, enabled_layers: set[str], excluded_tags
                 "errors": [],
                 "warnings": [],
                 "layer_totals": {},
+                "layer_elapsed": {},
                 "replacements_log": [],
             })
 
@@ -216,6 +261,7 @@ def run_masking(folder: str, model: str, enabled_layers: set[str], excluded_tags
 
     st.session_state["results"] = results
     st.session_state["all_log_entries"] = all_log_entries
+    st.session_state["selected_model"] = model
     st.session_state["done"] = True
 
 
@@ -378,7 +424,14 @@ def main() -> None:
         if all_log_entries:
             st.markdown("---")
             st.markdown("### 置換ログ（コピー用）")
-            st.code(_build_replacement_log_text(all_log_entries), language=None)
+            st.code(
+                _build_replacement_log_text(
+                    all_log_entries,
+                    results=results,
+                    model=st.session_state.get("selected_model"),
+                ),
+                language=None,
+            )
 
         # システムログ（コピー用）
         st.markdown("---")

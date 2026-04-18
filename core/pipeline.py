@@ -26,13 +26,17 @@ def mask_text(
     preview = text[:80].replace("\n", " ")
     logger.debug("パイプライン開始 | 入力文字数=%d | 先頭='%s'", len(text), preview)
 
+    layer_elapsed: dict[str, float] = {}
+
     # Layer 1: 正規表現
     l1_reps: list[dict] = []
     if "layer1" in enabled:
         t0 = time.monotonic()
         logger.info("[Layer 1] 正規表現マスキング 開始")
         l1_text, l1_reps = apply_regex(text, excluded_tags)
-        logger.info("[Layer 1] 完了 | 検出=%d件 | 経過=%.3fs", len(l1_reps), time.monotonic() - t0)
+        elapsed = time.monotonic() - t0
+        layer_elapsed["layer1"] = elapsed
+        logger.info("[Layer 1] 完了 | 検出=%d件 | 経過=%.3fs", len(l1_reps), elapsed)
         for r in l1_reps:
             logger.debug("[Layer 1] '%s' → '%s'", r.get("original"), r.get("tag"))
     else:
@@ -47,10 +51,13 @@ def mask_text(
         logger.info("[Layer 2] 固有名詞認識 (NER) 開始")
         try:
             l2_text, l2_reps = apply_ner(l1_text, excluded_tags)
-            logger.info("[Layer 2] 完了 | 検出=%d件 | 経過=%.3fs", len(l2_reps), time.monotonic() - t0)
+            elapsed = time.monotonic() - t0
+            layer_elapsed["layer2"] = elapsed
+            logger.info("[Layer 2] 完了 | 検出=%d件 | 経過=%.3fs", len(l2_reps), elapsed)
             for r in l2_reps:
                 logger.debug("[Layer 2] '%s' → '%s'", r.get("original"), r.get("tag"))
         except Exception as e:
+            layer_elapsed["layer2"] = time.monotonic() - t0
             logger.error("[Layer 2] NER 失敗 | %s", e)
             l2_text, l2_reps = l1_text, []
             l2_error = str(e)
@@ -65,6 +72,8 @@ def mask_text(
         logger.info("[Layer 3] LLM マスキング 開始")
         t0 = time.monotonic()
         masker_result = call_masker(l2_text, model, lm_studio_url, excluded_tags)
+        elapsed = time.monotonic() - t0
+        layer_elapsed["layer3"] = elapsed
         if masker_result is None:
             logger.warning("[Layer 3] 失敗 — Layer 1+2 の結果で返却")
             errors = []
@@ -80,11 +89,12 @@ def mask_text(
                 confidence=0.7,
                 error="; ".join(errors),
                 layer_counts={"layer1": len(l1_reps), "layer2": len(l2_reps), "layer3": 0, "layer4": 0},
+                layer_elapsed=layer_elapsed,
             )
         l3_reps = masker_result.get("replacements", [])
         if not isinstance(l3_reps, list):
             l3_reps = []
-        logger.info("[Layer 3] 完了 | 検出=%d件 | 経過=%.3fs", len(l3_reps), time.monotonic() - t0)
+        logger.info("[Layer 3] 完了 | 検出=%d件 | 経過=%.3fs", len(l3_reps), elapsed)
         for r in l3_reps:
             logger.debug("[Layer 3] '%s' → '%s'", r.get("original"), r.get("tag"))
         masked_val = masker_result.get("masked_text", l2_text)
@@ -100,6 +110,8 @@ def mask_text(
         logger.info("[Layer 4] LLM レビュー 開始")
         t0 = time.monotonic()
         reviewer_result = call_reviewer(masked, model, lm_studio_url, excluded_tags, original_text=text)
+        elapsed = time.monotonic() - t0
+        layer_elapsed["layer4"] = elapsed
         if reviewer_result is None:
             logger.warning("[Layer 4] 失敗 — Masker 結果で返却")
             errors = []
@@ -116,6 +128,7 @@ def mask_text(
                 confidence=0.8,
                 error="; ".join(errors),
                 layer_counts={"layer1": len(l1_reps), "layer2": len(l2_reps), "layer3": len(l3_reps), "layer4": 0},
+                layer_elapsed=layer_elapsed,
             )
         additional = reviewer_result.get("additional", [])
         if not isinstance(additional, list):
@@ -127,7 +140,7 @@ def mask_text(
         final = final_val if isinstance(final_val, str) and final_val else masked
         logger.info(
             "[Layer 4] 完了 | 追加検出=%d件 | confidence=%.2f | 経過=%.3fs",
-            len(additional), confidence, time.monotonic() - t0,
+            len(additional), confidence, elapsed,
         )
         for r in additional:
             logger.debug("[Layer 4] '%s' → '%s'", r.get("original"), r.get("tag"))
@@ -151,4 +164,5 @@ def mask_text(
             "layer3": len(l3_reps),
             "layer4": len(additional),
         },
+        layer_elapsed=layer_elapsed,
     )

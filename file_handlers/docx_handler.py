@@ -11,24 +11,24 @@ _LABEL_TO_TAG: dict[str, str] = {
 }
 
 
-def _merge_layer_counts(totals: dict, counts: dict) -> None:
-    for k, v in counts.items():
+def _merge_numeric(totals: dict, values: dict) -> None:
+    for k, v in values.items():
         totals[k] = totals.get(k, 0) + v
 
 
 def _mask_paragraph(
     para, model: str, url: str, enabled_layers: set[str] | None = None, excluded_tags: set[str] | None = None
-) -> tuple[int, dict, list[str], list[dict]]:
+) -> tuple[int, dict, dict, list[str], list[dict]]:
     if not para.runs or not para.text.strip():
-        return 0, {}, [], []
+        return 0, {}, {}, [], []
     result = mask_text(para.text, model, url, enabled_layers, excluded_tags)
     errs = [result.error] if result.error else []
     if result.final_text == para.text:
-        return 0, result.layer_counts, errs, []
+        return 0, result.layer_counts, result.layer_elapsed, errs, []
     para.runs[0].text = result.final_text
     for run in para.runs[1:]:
         run.text = ""
-    return len(result.replacements), result.layer_counts, errs, result.replacements
+    return len(result.replacements), result.layer_counts, result.layer_elapsed, errs, result.replacements
 
 
 def process_docx(path: Path, model: str, lm_studio_url: str, enabled_layers: set[str] | None = None, excluded_tags: set[str] | None = None) -> ProcessResult:
@@ -40,13 +40,15 @@ def process_docx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
     errors: list[str] = []
     warnings: list[str] = []
     layer_totals: dict = {}
+    layer_elapsed: dict = {}
     replacements_log: list[dict] = []
 
     for para_idx, para in enumerate(doc.paragraphs):
         try:
-            count, lc, errs, reps = _mask_paragraph(para, model, lm_studio_url, enabled_layers, excluded_tags)
+            count, lc, le, errs, reps = _mask_paragraph(para, model, lm_studio_url, enabled_layers, excluded_tags)
             total += count
-            _merge_layer_counts(layer_totals, lc)
+            _merge_numeric(layer_totals, lc)
+            _merge_numeric(layer_elapsed, le)
             errors.extend(errs)
             for r in reps:
                 replacements_log.append({**r, "location": f"段落{para_idx + 1}"})
@@ -69,10 +71,11 @@ def process_docx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
 
                 for para in cell.paragraphs:
                     try:
-                        count, lc, errs, reps = _mask_paragraph(para, model, lm_studio_url, enabled_layers, excluded_tags)
+                        count, lc, le, errs, reps = _mask_paragraph(para, model, lm_studio_url, enabled_layers, excluded_tags)
                         subtotal += count
                         cell_replaced += count
-                        _merge_layer_counts(layer_totals, lc)
+                        _merge_numeric(layer_totals, lc)
+                        _merge_numeric(layer_elapsed, le)
                         errors.extend(errs)
                         for r in reps:
                             replacements_log.append({**r, "location": loc})
@@ -103,6 +106,7 @@ def process_docx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
         total_replacements=total,
         errors=errors,
         layer_totals=layer_totals,
+        layer_elapsed=layer_elapsed,
         replacements_log=replacements_log,
         warnings=warnings,
     )

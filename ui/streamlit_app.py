@@ -9,7 +9,8 @@ from file_handlers.pptx_handler import process_pptx
 from file_handlers.docx_handler import process_docx
 from ui.log_handler import install as install_log_handler, uninstall as uninstall_log_handler
 
-logging.basicConfig(level=logging.DEBUG)
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=logging.DEBUG)
 
 _HANDLERS = {".xlsx": process_xlsx, ".pptx": process_pptx, ".docx": process_docx}
 
@@ -282,7 +283,7 @@ def main() -> None:
         result_top.empty()
         st.session_state["done"] = False
         st.session_state["all_log_entries"] = []
-        st.session_state["system_logs"] = []
+        # system_logs は install_log_handler 内で初期化されるためここでは触らない
         run_masking(folder, selected_model, enabled_layers, excluded_tags)
 
     if st.session_state.get("done"):

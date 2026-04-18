@@ -173,12 +173,15 @@ def test_call_reviewer_connection_error():
     assert result is None
 
 
-def test_call_reviewer_additional_none_causes_error():
-    # additional=None の場合、_call_lm_studio 内で len(None) エラーが発生し None が返る
+def test_call_reviewer_additional_none_tolerated():
+    # additional=None が返っても _call_lm_studio は例外を起こさず結果を返し、
+    # 呼び出し元（pipeline）が list チェックで空配列に正規化する
     body = {"final_text": "[氏名]", "additional": None, "confidence": 0.9}
     with patch("requests.post", return_value=_make_response(body)):
         result = call_reviewer("[氏名]", "test-model", "http://localhost:1234/v1/chat/completions")
-    assert result is None
+    assert result is not None
+    assert result["final_text"] == "[氏名]"
+    assert result["additional"] is None  # 後段で list に正規化される
 
 
 # --- LFM2 モード ---
@@ -202,6 +205,39 @@ def test_apply_lfm2_entities_masks_correctly():
     assert "[会社名]" in masked
     assert any(r["tag"] == "[氏名]" for r in reps)
     assert any(r["tag"] == "[会社名]" for r in reps)
+
+
+def test_apply_lfm2_entities_substring_longer_first():
+    """部分文字列（田中）と長い文字列（田中太郎）が同時に返っても正しく処理される"""
+    raw = {"human_name": ["田中", "田中太郎"]}
+    masked, reps = _apply_lfm2_entities("田中太郎と田中さん", raw, set())
+    # "田中太郎" が先に置換されるため "[氏名]と[氏名]さん" になる
+    assert masked == "[氏名]と[氏名]さん"
+    assert len(reps) == 2
+
+
+def test_apply_lfm2_entities_multiple_occurrences():
+    """同じエンティティが複数回出現する場合、すべて置換される"""
+    raw = {"human_name": ["山田太郎"]}
+    masked, reps = _apply_lfm2_entities("山田太郎さんと山田太郎さん", raw, set())
+    assert masked == "[氏名]さんと[氏名]さん"
+    assert len(reps) == 2
+
+
+def test_revert_excluded_ordering_with_reference_text():
+    """replacements の順序が逆でも reference_text で正しく元に戻せる"""
+    # 本文順: 山田 → 田中
+    reference = "山田さんと田中さん"
+    # replacements は逆順で来た想定
+    reps = [
+        {"original": "田中", "tag": "[氏名]"},
+        {"original": "山田", "tag": "[氏名]"},
+    ]
+    reverted, kept = _revert_excluded(
+        "[氏名]さんと[氏名]さん", reps, {"[氏名]"}, reference_text=reference
+    )
+    assert reverted == "山田さんと田中さん"
+    assert kept == []
 
 
 def test_apply_lfm2_entities_excluded_tags():

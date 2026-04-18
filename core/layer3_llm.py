@@ -27,19 +27,22 @@ MASKER_SYSTEM = """\
 
 REVIEWER_SYSTEM = """\
 あなたは個人情報マスキングの品質レビュアーAIです。
-マスク済みテキストを受け取り、見落とされた個人情報を追加マスクします。
+「原文」と「マスク済みテキスト」の両方を受け取り、以下の2点を確認します。
+
+入力フォーマット:
+【原文】に元のテキスト、【マスク済みテキスト】にLayer1-3でマスク済みのテキストが含まれます。
+原文を参照することで、残存PII の検出と過検出の判断を正確に行ってください。
 
 確認ポイント:
-- 残存している人名（日本語・英語）
-- 住所の断片（丁目・番地・マンション名）
-- 会社名・ブランド名
+1. マスク済みテキストに残存している人名（日本語・英語）・住所の断片・会社名
+2. 原文と比較して過検出されたマスク（一般名詞・部署名・法律上の甲乙等）を元に戻す
 
 ルール:
-- すでに[タグ]形式の箇所はそのまま保持
-- 過検出（一般名詞・地名等）は避ける
-- 変更がない場合も final_text に入力テキストをそのまま返す
+- すでに[タグ]形式の箇所はそのまま保持（過検出でない限り）
+- 過検出（一般名詞・地名・部署名・甲乙等の法律用語）は final_text で元の語に戻す
+- 変更がない場合も final_text にマスク済みテキストをそのまま返す
 
-必ず以下のJSONのみ出力:
+必ず以下のJSONのみ出力（前置き・説明不要）:
 {"final_text": "...", "additional": [{"original": "...", "tag": "..."}], "confidence": 0.0}
 """
 
@@ -203,7 +206,13 @@ def call_masker(text: str, model: str, url: str, excluded_tags: set[str] | None 
     return result
 
 
-def call_reviewer(masked_text: str, model: str, url: str, excluded_tags: set[str] | None = None) -> dict | None:
+def call_reviewer(
+    masked_text: str,
+    model: str,
+    url: str,
+    excluded_tags: set[str] | None = None,
+    original_text: str | None = None,
+) -> dict | None:
     excluded = excluded_tags or set()
 
     if _is_lfm2_model(model):
@@ -214,7 +223,12 @@ def call_reviewer(masked_text: str, model: str, url: str, excluded_tags: set[str
         final, additional = _apply_lfm2_entities(masked_text, raw, excluded)
         return {"final_text": final, "additional": additional, "confidence": 0.95}
 
-    result = _call_lm_studio(REVIEWER_SYSTEM, masked_text, url, model, role="Layer4 Reviewer")
+    if original_text and original_text != masked_text:
+        user_message = f"【原文】\n{original_text}\n\n【マスク済みテキスト】\n{masked_text}"
+    else:
+        user_message = masked_text
+
+    result = _call_lm_studio(REVIEWER_SYSTEM, user_message, url, model, role="Layer4 Reviewer")
     if result is None or not excluded_tags:
         return result
     additional = result.get("additional", [])

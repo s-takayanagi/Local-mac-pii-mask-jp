@@ -16,6 +16,7 @@ def mask_text(
     model: str,
     lm_studio_url: str,
     enabled_layers: set[str] | None = None,
+    excluded_tags: set[str] | None = None,
 ) -> MaskResult:
     if not text or not text.strip() or len(text.strip()) <= 1:
         return MaskResult(final_text=text, replacements=[], confidence=1.0)
@@ -30,7 +31,7 @@ def mask_text(
     if "layer1" in enabled:
         t0 = time.monotonic()
         logger.info("[Layer 1] 正規表現マスキング 開始")
-        l1_text, l1_reps = apply_regex(text)
+        l1_text, l1_reps = apply_regex(text, excluded_tags)
         logger.info("[Layer 1] 完了 | 検出=%d件 | 経過=%.3fs", len(l1_reps), time.monotonic() - t0)
         for r in l1_reps:
             logger.debug("[Layer 1] '%s' → '%s'", r.get("original"), r.get("tag"))
@@ -45,7 +46,7 @@ def mask_text(
         t0 = time.monotonic()
         logger.info("[Layer 2] 固有名詞認識 (NER) 開始")
         try:
-            l2_text, l2_reps = apply_ner(l1_text)
+            l2_text, l2_reps = apply_ner(l1_text, excluded_tags)
             logger.info("[Layer 2] 完了 | 検出=%d件 | 経過=%.3fs", len(l2_reps), time.monotonic() - t0)
             for r in l2_reps:
                 logger.debug("[Layer 2] '%s' → '%s'", r.get("original"), r.get("tag"))
@@ -63,7 +64,7 @@ def mask_text(
     if "layer3" in enabled:
         logger.info("[Layer 3] LLM マスキング 開始")
         t0 = time.monotonic()
-        masker_result = call_masker(l2_text, model, lm_studio_url)
+        masker_result = call_masker(l2_text, model, lm_studio_url, excluded_tags)
         if masker_result is None:
             logger.warning("[Layer 3] 失敗 — Layer 1+2 の結果で返却")
             errors = []
@@ -98,7 +99,7 @@ def mask_text(
     if "layer4" in enabled:
         logger.info("[Layer 4] LLM レビュー 開始")
         t0 = time.monotonic()
-        reviewer_result = call_reviewer(masked, model, lm_studio_url)
+        reviewer_result = call_reviewer(masked, model, lm_studio_url, excluded_tags)
         if reviewer_result is None:
             logger.warning("[Layer 4] 失敗 — Masker 結果で返却")
             errors = []

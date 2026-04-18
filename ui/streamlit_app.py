@@ -13,6 +13,19 @@ logging.basicConfig(level=logging.DEBUG)
 
 _HANDLERS = {".xlsx": process_xlsx, ".pptx": process_pptx, ".docx": process_docx}
 
+_PII_CATEGORIES = [
+    ("氏名", "[氏名]"),
+    ("住所", "[住所]"),
+    ("電話番号", "[電話番号]"),
+    ("メールアドレス", "[メール]"),
+    ("会社名・組織名", "[会社名]"),
+    ("郵便番号", "[郵便番号]"),
+    ("生年月日", "[生年月日]"),
+    ("マイナンバー等12桁", "[識別番号]"),
+    ("URL", "[URL]"),
+    ("その他個人情報", "[個人情報]"),
+]
+
 _LAYER_INFO = [
     ("layer1", "Layer 1", "正規表現"),
     ("layer2", "Layer 2", "固有名詞認識"),
@@ -126,7 +139,7 @@ def _render_system_log(container, sys_logs: list[str], max_lines: int = 200) -> 
             st.caption(f"最新 {max_lines} 行を表示中（合計 {len(sys_logs)} 行）")
 
 
-def run_masking(folder: str, model: str, enabled_layers: set[str]) -> None:
+def run_masking(folder: str, model: str, enabled_layers: set[str], excluded_tags: set[str] | None = None) -> None:
     folder_path = Path(folder)
     if not folder_path.is_dir():
         st.error(f"フォルダが見つかりません: {folder}")
@@ -160,7 +173,7 @@ def run_masking(folder: str, model: str, enabled_layers: set[str]) -> None:
 
         logging.getLogger(__name__).info("=== ファイル処理開始: %s ===", f.name)
         try:
-            result = _HANDLERS[f.suffix.lower()](f, model, LM_STUDIO_URL, enabled_layers)
+            result = _HANDLERS[f.suffix.lower()](f, model, LM_STUDIO_URL, enabled_layers, excluded_tags)
             file_entries = [{**r, "file": f.name} for r in result.replacements_log]
             all_log_entries.extend(file_entries)
             logging.getLogger(__name__).info(
@@ -236,6 +249,13 @@ def main() -> None:
         if use_layer4:
             enabled_layers.add("layer4")
 
+        st.divider()
+        st.markdown("**除外する項目**")
+        excluded_tags: set[str] = set()
+        for label, tag in _PII_CATEGORIES:
+            if not st.checkbox(label, value=True, key=f"pii_{tag}"):
+                excluded_tags.add(tag)
+
     needs_lm = bool(enabled_layers & {"layer3", "layer4"})
 
     folder = st.text_input(
@@ -251,7 +271,7 @@ def main() -> None:
         st.session_state["done"] = False
         st.session_state["all_log_entries"] = []
         st.session_state["system_logs"] = []
-        run_masking(folder, selected_model, enabled_layers)
+        run_masking(folder, selected_model, enabled_layers, excluded_tags)
 
     if st.session_state.get("done"):
         results = st.session_state.get("results", [])

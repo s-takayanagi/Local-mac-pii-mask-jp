@@ -49,7 +49,8 @@ def _is_admin_unit(text: str) -> bool:
     return any(text.startswith(p) for p in _ADMIN_PREFIXES)
 
 
-def apply_ner(text: str) -> tuple[str, list[dict]]:
+def apply_ner(text: str, excluded_tags: set[str] | None = None) -> tuple[str, list[dict]]:
+    excluded = excluded_tags or set()
     nlp = _load_nlp()
     doc = nlp(text)
     replacements: list[dict] = []
@@ -58,6 +59,8 @@ def apply_ner(text: str) -> tuple[str, list[dict]]:
     for ent in doc.ents:
         tag = _LABEL_TAG.get(ent.label_)
         if tag is None:
+            continue
+        if tag in excluded:
             continue
         if _is_admin_unit(ent.text):
             continue

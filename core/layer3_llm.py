@@ -43,6 +43,41 @@ REVIEWER_SYSTEM = """\
 {"final_text": "...", "additional": [{"original": "...", "tag": "..."}], "confidence": 0.0}
 """
 
+# LFM2-350M-PII-Extract-JP の固有出力キーとタグのマッピング
+_LFM2_TAG_MAP: dict[str, str] = {
+    "address": "[住所]",
+    "company_name": "[会社名]",
+    "email_address": "[メール]",
+    "human_name": "[氏名]",
+    "phone_number": "[電話番号]",
+}
+
+
+def _is_lfm2_model(model: str) -> bool:
+    lower = model.lower()
+    return "lfm2" in lower or "pii-extract" in lower
+
+
+def _apply_lfm2_entities(
+    text: str, raw: dict, excluded_tags: set[str]
+) -> tuple[str, list[dict]]:
+    """LFM2 形式 {"human_name": [...], ...} をテキストに適用して replacements を返す"""
+    replacements: list[dict] = []
+    masked = text
+    for key, tag in _LFM2_TAG_MAP.items():
+        if tag in excluded_tags:
+            continue
+        entities = raw.get(key, [])
+        if not isinstance(entities, list):
+            continue
+        for entity in entities:
+            if not isinstance(entity, str) or not entity:
+                continue
+            if entity in masked:
+                masked = masked.replace(entity, tag, 1)
+                replacements.append({"original": entity, "tag": tag})
+    return masked, replacements
+
 
 def _call_lm_studio(
     system: str, user: str, url: str, model: str, role: str, timeout: int = 120
@@ -139,6 +174,16 @@ def _revert_excluded(text: str, replacements: list[dict], excluded_tags: set[str
 
 
 def call_masker(text: str, model: str, url: str, excluded_tags: set[str] | None = None) -> dict | None:
+    excluded = excluded_tags or set()
+
+    if _is_lfm2_model(model):
+        logger.debug("[Layer3 Masker] LFM2 モード: システムプロンプトなしで実行")
+        raw = _call_lm_studio("", text, url, model, role="Layer3 Masker")
+        if raw is None:
+            return None
+        masked, reps = _apply_lfm2_entities(text, raw, excluded)
+        return {"masked_text": masked, "replacements": reps}
+
     result = _call_lm_studio(MASKER_SYSTEM, text, url, model, role="Layer3 Masker")
     if result is None or not excluded_tags:
         return result
@@ -155,6 +200,16 @@ def call_masker(text: str, model: str, url: str, excluded_tags: set[str] | None 
 
 
 def call_reviewer(masked_text: str, model: str, url: str, excluded_tags: set[str] | None = None) -> dict | None:
+    excluded = excluded_tags or set()
+
+    if _is_lfm2_model(model):
+        logger.debug("[Layer4 Reviewer] LFM2 モード: システムプロンプトなしで実行")
+        raw = _call_lm_studio("", masked_text, url, model, role="Layer4 Reviewer")
+        if raw is None:
+            return None
+        final, additional = _apply_lfm2_entities(masked_text, raw, excluded)
+        return {"final_text": final, "additional": additional, "confidence": 0.95}
+
     result = _call_lm_studio(REVIEWER_SYSTEM, masked_text, url, model, role="Layer4 Reviewer")
     if result is None or not excluded_tags:
         return result

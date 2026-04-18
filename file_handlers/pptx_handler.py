@@ -7,8 +7,8 @@ from file_handlers.base import masked_output_path
 from models import ProcessResult
 
 
-def _merge_layer_counts(totals: dict, counts: dict) -> None:
-    for k, v in counts.items():
+def _merge_numeric(totals: dict, values: dict) -> None:
+    for k, v in values.items():
         totals[k] = totals.get(k, 0) + v
 
 
@@ -22,9 +22,10 @@ def _iter_shapes(shapes):
 
 def _mask_text_frame(
     tf, model: str, url: str, enabled_layers: set[str] | None = None, excluded_tags: set[str] | None = None
-) -> tuple[int, dict, list[str], list[dict]]:
+) -> tuple[int, dict, dict, list[str], list[dict]]:
     total = 0
     layer_totals: dict = {}
+    layer_elapsed: dict = {}
     errors: list[str] = []
     reps: list[dict] = []
     for para in tf.paragraphs:
@@ -34,11 +35,12 @@ def _mask_text_frame(
             result = mask_text(run.text, model, url, enabled_layers, excluded_tags)
             run.text = result.final_text
             total += len(result.replacements)
-            _merge_layer_counts(layer_totals, result.layer_counts)
+            _merge_numeric(layer_totals, result.layer_counts)
+            _merge_numeric(layer_elapsed, result.layer_elapsed)
             if result.error:
                 errors.append(result.error)
             reps.extend(result.replacements)
-    return total, layer_totals, errors, reps
+    return total, layer_totals, layer_elapsed, errors, reps
 
 
 def process_pptx(path: Path, model: str, lm_studio_url: str, enabled_layers: set[str] | None = None, excluded_tags: set[str] | None = None) -> ProcessResult:
@@ -49,15 +51,17 @@ def process_pptx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
     total = 0
     errors: list[str] = []
     layer_totals: dict = {}
+    layer_elapsed: dict = {}
     replacements_log: list[dict] = []
 
     for slide_idx, slide in enumerate(prs.slides):
         for shape in _iter_shapes(slide.shapes):
             try:
                 if shape.has_text_frame:
-                    count, lc, errs, reps = _mask_text_frame(shape.text_frame, model, lm_studio_url, enabled_layers, excluded_tags)
+                    count, lc, le, errs, reps = _mask_text_frame(shape.text_frame, model, lm_studio_url, enabled_layers, excluded_tags)
                     total += count
-                    _merge_layer_counts(layer_totals, lc)
+                    _merge_numeric(layer_totals, lc)
+                    _merge_numeric(layer_elapsed, le)
                     errors.extend(errs)
                     loc = f"スライド{slide_idx + 1}/{shape.name}"
                     for r in reps:
@@ -66,11 +70,12 @@ def process_pptx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
                     tbl = shape.table
                     for r in range(len(tbl.rows)):
                         for c in range(len(tbl.columns)):
-                            count, lc, errs, reps = _mask_text_frame(
+                            count, lc, le, errs, reps = _mask_text_frame(
                                 tbl.cell(r, c).text_frame, model, lm_studio_url, enabled_layers, excluded_tags
                             )
                             total += count
-                            _merge_layer_counts(layer_totals, lc)
+                            _merge_numeric(layer_totals, lc)
+                            _merge_numeric(layer_elapsed, le)
                             errors.extend(errs)
                             loc = f"スライド{slide_idx + 1}/{shape.name}/行{r + 1}/列{c + 1}"
                             for rep in reps:
@@ -84,5 +89,6 @@ def process_pptx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
         total_replacements=total,
         errors=errors,
         layer_totals=layer_totals,
+        layer_elapsed=layer_elapsed,
         replacements_log=replacements_log,
     )

@@ -6,8 +6,8 @@ from file_handlers.base import masked_output_path
 from models import ProcessResult
 
 
-def _merge_layer_counts(totals: dict, counts: dict) -> None:
-    for k, v in counts.items():
+def _merge_numeric(totals: dict, values: dict) -> None:
+    for k, v in values.items():
         totals[k] = totals.get(k, 0) + v
 
 
@@ -19,6 +19,7 @@ def process_xlsx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
     total = 0
     errors: list[str] = []
     layer_totals: dict = {}
+    layer_elapsed: dict = {}
 
     replacements_log: list[dict] = []
 
@@ -31,7 +32,8 @@ def process_xlsx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
                     result = mask_text(cell.value, model, lm_studio_url, enabled_layers, excluded_tags)
                     cell.value = result.final_text
                     total += len(result.replacements)
-                    _merge_layer_counts(layer_totals, result.layer_counts)
+                    _merge_numeric(layer_totals, result.layer_counts)
+                    _merge_numeric(layer_elapsed, result.layer_elapsed)
                     if result.error:
                         errors.append(f"{ws.title}!{cell.coordinate}: {result.error}")
                     loc = f"{ws.title}!{cell.coordinate}"
@@ -46,5 +48,6 @@ def process_xlsx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
         total_replacements=total,
         errors=errors,
         layer_totals=layer_totals,
+        layer_elapsed=layer_elapsed,
         replacements_log=replacements_log,
     )

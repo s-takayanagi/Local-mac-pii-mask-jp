@@ -10,6 +10,8 @@ class MaskResult:
     error: str | None = None
     layer_counts: dict = field(default_factory=dict)
     # keys: "layer1", "layer2", "layer3", "layer4" → int (件数)
+    layer_elapsed: dict = field(default_factory=dict)
+    # keys: "layer1"〜"layer4" → float (秒)
 
 
 @dataclass
@@ -32,6 +34,8 @@ class ProcessResult:
     errors: list[str] = field(default_factory=list)
     layer_totals: dict = field(default_factory=dict)
     # keys: "layer1"〜"layer4" → ファイル全体の合計件数
+    layer_elapsed: dict = field(default_factory=dict)
+    # keys: "layer1"〜"layer4" → ファイル全体の累計処理時間(秒)
     replacements_log: list[dict] = field(default_factory=list)
     # each entry: {"location": str, "original": str, "tag": str, "layer": str}
     warnings: list[str] = field(default_factory=list)

@@ -126,7 +126,7 @@ def _render_system_log(container, sys_logs: list[str], max_lines: int = 200) -> 
             st.caption(f"最新 {max_lines} 行を表示中（合計 {len(sys_logs)} 行）")
 
 
-def run_masking(folder: str, model: str) -> None:
+def run_masking(folder: str, model: str, enabled_layers: set[str]) -> None:
     folder_path = Path(folder)
     if not folder_path.is_dir():
         st.error(f"フォルダが見つかりません: {folder}")
@@ -160,7 +160,7 @@ def run_masking(folder: str, model: str) -> None:
 
         logging.getLogger(__name__).info("=== ファイル処理開始: %s ===", f.name)
         try:
-            result = _HANDLERS[f.suffix.lower()](f, model, LM_STUDIO_URL)
+            result = _HANDLERS[f.suffix.lower()](f, model, LM_STUDIO_URL, enabled_layers)
             file_entries = [{**r, "file": f.name} for r in result.replacements_log]
             all_log_entries.extend(file_entries)
             logging.getLogger(__name__).info(
@@ -220,24 +220,38 @@ def main() -> None:
         selected_model = st.selectbox("モデル", lm_status["models"])
 
         st.divider()
-        st.caption("処理レイヤー")
-        st.caption("1️⃣ 正規表現  →  2️⃣ 固有名詞認識")
-        st.caption("3️⃣ AI マスキング  →  4️⃣ AI レビュー")
+        st.markdown("**処理レイヤー**")
+        use_layer1 = st.checkbox("1️⃣ 正規表現", value=True)
+        use_layer2 = st.checkbox("2️⃣ 固有名詞認識 (NER)", value=True)
+        use_layer3 = st.checkbox("3️⃣ AI マスキング (LLM)", value=True)
+        use_layer4 = st.checkbox("4️⃣ AI レビュー (LLM)", value=True)
+
+        enabled_layers: set[str] = set()
+        if use_layer1:
+            enabled_layers.add("layer1")
+        if use_layer2:
+            enabled_layers.add("layer2")
+        if use_layer3:
+            enabled_layers.add("layer3")
+        if use_layer4:
+            enabled_layers.add("layer4")
+
+    needs_lm = bool(enabled_layers & {"layer3", "layer4"})
 
     folder = st.text_input(
         "処理フォルダのパスを入力してください",
         placeholder="/path/to/folder",
     )
 
-    can_start = bool(folder) and lm_status["ok"]
-    if not lm_status["ok"]:
-        st.warning("LM Studio に接続できないため、マスキングを開始できません。")
+    can_start = bool(folder) and (not needs_lm or lm_status["ok"]) and bool(enabled_layers)
+    if needs_lm and not lm_status["ok"]:
+        st.warning("Layer 3 / Layer 4 が有効なため、LM Studio に接続できないとマスキングを開始できません。")
 
     if st.button("マスキング開始", disabled=not can_start):
         st.session_state["done"] = False
         st.session_state["all_log_entries"] = []
         st.session_state["system_logs"] = []
-        run_masking(folder, selected_model)
+        run_masking(folder, selected_model, enabled_layers)
 
     if st.session_state.get("done"):
         results = st.session_state.get("results", [])
@@ -255,24 +269,46 @@ def main() -> None:
 
         st.markdown("---")
 
+        # 応答なしエラー表示フィルター
+        def _is_soft_error(msg: str) -> bool:
+            return "応答なし" in msg
+
+        soft_error_count = sum(
+            sum(1 for e in r["errors"] if _is_soft_error(e))
+            for r in results
+        )
+        show_soft_errors = False
+        if soft_error_count > 0:
+            show_soft_errors = st.checkbox(
+                f"応答なしエラーを表示する（{soft_error_count} 件・処理は継続済み）",
+                value=False,
+            )
+
         # ファイルごとの詳細
         for r in results:
+            hard_errors = [e for e in r["errors"] if not _is_soft_error(e)]
+            soft_errors = [e for e in r["errors"] if _is_soft_error(e)]
+            visible_errors = hard_errors + (soft_errors if show_soft_errors else [])
+            has_visible_issues = bool(r["error"] or visible_errors)
+
             icon = "✅" if not r["error"] and not r["errors"] else ("⚠️" if r["errors"] else "❌")
             header = f"{icon} {r['name']}"
             if r["out"]:
                 header += f"  →  {r['out']}  （{r['count']}件）"
 
-            with st.expander(header, expanded=bool(r["error"] or r["errors"])):
+            with st.expander(header, expanded=has_visible_issues):
                 if r["error"]:
                     st.error(f"ファイル処理エラー: {r['error']}")
 
                 st.markdown("**レイヤー別検出件数**")
                 _render_layer_summary(r["layer_totals"])
 
-                if r["errors"]:
+                if visible_errors:
                     st.markdown("**処理中エラー一覧**")
-                    for err in r["errors"]:
+                    for err in visible_errors:
                         st.warning(err)
+                elif soft_errors and not show_soft_errors:
+                    st.caption(f"応答なしエラー {len(soft_errors)} 件（処理継続済み・上部チェックボックスで表示）")
 
                 if r["replacements_log"]:
                     st.markdown("**置換詳細**")

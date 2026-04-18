@@ -11,7 +11,7 @@ def _merge_layer_counts(totals: dict, counts: dict) -> None:
         totals[k] = totals.get(k, 0) + v
 
 
-def process_xlsx(path: Path, model: str, lm_studio_url: str) -> ProcessResult:
+def process_xlsx(path: Path, model: str, lm_studio_url: str, enabled_layers: set[str] | None = None) -> ProcessResult:
     output = masked_output_path(path)
     shutil.copy2(path, output)
 
@@ -28,7 +28,7 @@ def process_xlsx(path: Path, model: str, lm_studio_url: str) -> ProcessResult:
                 if not isinstance(cell.value, str) or len(cell.value.strip()) <= 1:
                     continue
                 try:
-                    result = mask_text(cell.value, model, lm_studio_url)
+                    result = mask_text(cell.value, model, lm_studio_url, enabled_layers)
                     cell.value = result.final_text
                     total += len(result.replacements)
                     _merge_layer_counts(layer_totals, result.layer_counts)

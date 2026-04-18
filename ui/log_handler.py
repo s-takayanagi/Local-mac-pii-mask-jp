@@ -1,5 +1,13 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+_JST = timezone(timedelta(hours=9))
+
+
+class _JSTFormatter(logging.Formatter):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+        ct = datetime.fromtimestamp(record.created, tz=_JST)
+        return ct.strftime(datefmt or "%H:%M:%S")
 
 
 class SessionStateLogHandler(logging.Handler):
@@ -10,8 +18,8 @@ class SessionStateLogHandler(logging.Handler):
 
     def __init__(self, level: int = logging.DEBUG) -> None:
         super().__init__(level)
-        fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-        self.setFormatter(logging.Formatter(fmt, datefmt="%H:%M:%S"))
+        fmt = "%(asctime)s JST [%(levelname)s] %(name)s: %(message)s"
+        self.setFormatter(_JSTFormatter(fmt, datefmt="%H:%M:%S"))
 
     def emit(self, record: logging.LogRecord) -> None:
         try:

@@ -11,10 +11,12 @@ def _merge_layer_counts(totals: dict, counts: dict) -> None:
         totals[k] = totals.get(k, 0) + v
 
 
-def _mask_paragraph(para, model: str, url: str) -> tuple[int, dict, list[str], list[dict]]:
+def _mask_paragraph(
+    para, model: str, url: str, enabled_layers: set[str] | None = None
+) -> tuple[int, dict, list[str], list[dict]]:
     if not para.runs or not para.text.strip():
         return 0, {}, [], []
-    result = mask_text(para.text, model, url)
+    result = mask_text(para.text, model, url, enabled_layers)
     errs = [result.error] if result.error else []
     if result.final_text == para.text:
         return 0, result.layer_counts, errs, []
@@ -24,7 +26,7 @@ def _mask_paragraph(para, model: str, url: str) -> tuple[int, dict, list[str], l
     return len(result.replacements), result.layer_counts, errs, result.replacements
 
 
-def process_docx(path: Path, model: str, lm_studio_url: str) -> ProcessResult:
+def process_docx(path: Path, model: str, lm_studio_url: str, enabled_layers: set[str] | None = None) -> ProcessResult:
     output = masked_output_path(path)
     shutil.copy2(path, output)
 
@@ -36,7 +38,7 @@ def process_docx(path: Path, model: str, lm_studio_url: str) -> ProcessResult:
 
     for para_idx, para in enumerate(doc.paragraphs):
         try:
-            count, lc, errs, reps = _mask_paragraph(para, model, lm_studio_url)
+            count, lc, errs, reps = _mask_paragraph(para, model, lm_studio_url, enabled_layers)
             total += count
             _merge_layer_counts(layer_totals, lc)
             errors.extend(errs)
@@ -50,7 +52,7 @@ def process_docx(path: Path, model: str, lm_studio_url: str) -> ProcessResult:
             for col_idx, cell in enumerate(row.cells):
                 for para in cell.paragraphs:
                     try:
-                        count, lc, errs, reps = _mask_paragraph(para, model, lm_studio_url)
+                        count, lc, errs, reps = _mask_paragraph(para, model, lm_studio_url, enabled_layers)
                         total += count
                         _merge_layer_counts(layer_totals, lc)
                         errors.extend(errs)

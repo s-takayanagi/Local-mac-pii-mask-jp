@@ -15,9 +15,10 @@
 | フィールド | 型 | 説明 |
 |-----------|-----|------|
 | `final_text` | `str` | マスク済みテキスト |
-| `replacements` | `list[Replacement]` | 置換記録のリスト |
+| `replacements` | `list[dict]` | 置換記録のリスト。各 dict に `"original"`, `"tag"`, `"layer"` キーを含む |
 | `confidence` | `float` | マスキング完全性スコア（0.0〜1.0） |
 | `error` | `str \| None` | エラーメッセージ（正常時は None） |
+| `layer_counts` | `dict` | レイヤー別検出件数 `{"layer1": N, "layer2": N, "layer3": N, "layer4": N}` |
 
 ---
 
@@ -53,17 +54,22 @@ Layer 4 LLM レビューの出力。
 | `output_path` | `Path` | 出力ファイルのパス |
 | `total_replacements` | `int` | 総置換件数 |
 | `errors` | `list[str]` | エラーメッセージのリスト |
+| `layer_totals` | `dict` | ファイル全体のレイヤー別合計件数 `{"layer1": N, ...}` |
+| `replacements_log` | `list[dict]` | 置換ログ。各 dict に `"location"`, `"original"`, `"tag"`, `"layer"` キーを含む |
+| `warnings` | `list[str]` | 未マスクの可能性がある箇所の警告（docx のみ生成） |
 
 ---
 
-### `Replacement`（置換記録）
+### 置換記録（dict）
 
-各 PII の置換情報。
+実装上は `@dataclass` ではなく `dict` で管理。
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
+| キー | 型 | 説明 |
+|-----|-----|------|
 | `original` | `str` | 元のテキスト（マスク前） |
 | `tag` | `str` | 置換に使用したタグ（例: `[氏名]`） |
+| `layer` | `str` | 検出したレイヤー（`"layer1"` 〜 `"layer4"`）。`MaskResult.replacements` に付与 |
+| `location` | `str` | ファイル内の位置（例: `"Sheet1!A1"`、`"スライド2/テキストボックス1"`）。`ProcessResult.replacements_log` に付与 |
 
 ---
 

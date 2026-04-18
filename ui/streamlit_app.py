@@ -185,6 +185,7 @@ def run_masking(folder: str, model: str, enabled_layers: set[str], excluded_tags
                 "count": result.total_replacements,
                 "error": None,
                 "errors": result.errors,
+                "warnings": result.warnings,
                 "layer_totals": result.layer_totals,
                 "replacements_log": result.replacements_log,
             })
@@ -196,6 +197,7 @@ def run_masking(folder: str, model: str, enabled_layers: set[str], excluded_tags
                 "count": 0,
                 "error": str(e),
                 "errors": [],
+                "warnings": [],
                 "layer_totals": {},
                 "replacements_log": [],
             })
@@ -279,10 +281,15 @@ def main() -> None:
         system_logs = st.session_state.get("system_logs", [])
         total = sum(r["count"] for r in results)
         has_errors = any(r["error"] or r["errors"] for r in results)
+        has_warnings = any(r.get("warnings") for r in results)
 
         if has_errors:
             st.warning(
                 f"処理完了: {len(results)} ファイル / 合計 {total} 件置換（一部エラーあり）"
+            )
+        elif has_warnings:
+            st.warning(
+                f"処理完了: {len(results)} ファイル / 合計 {total} 件置換（要確認項目あり）"
             )
         else:
             st.success(f"処理完了: {len(results)} ファイル / 合計 {total} 件置換")
@@ -311,17 +318,30 @@ def main() -> None:
             visible_errors = hard_errors + (soft_errors if show_soft_errors else [])
             has_visible_issues = bool(r["error"] or visible_errors)
 
-            icon = "✅" if not r["error"] and not r["errors"] else ("⚠️" if r["errors"] else "❌")
+            file_warnings = r.get("warnings", [])
+            if r["error"]:
+                icon = "❌"
+            elif r["errors"]:
+                icon = "⚠️"
+            elif file_warnings:
+                icon = "🔔"
+            else:
+                icon = "✅"
             header = f"{icon} {r['name']}"
             if r["out"]:
                 header += f"  →  {r['out']}  （{r['count']}件）"
 
-            with st.expander(header, expanded=has_visible_issues):
+            with st.expander(header, expanded=has_visible_issues or bool(file_warnings)):
                 if r["error"]:
                     st.error(f"ファイル処理エラー: {r['error']}")
 
                 st.markdown("**レイヤー別検出件数**")
                 _render_layer_summary(r["layer_totals"])
+
+                if file_warnings:
+                    st.markdown("**⚠️ 要確認: 未マスクの可能性がある項目**")
+                    for w in file_warnings:
+                        st.warning(w)
 
                 if visible_errors:
                     st.markdown("**処理中エラー一覧**")

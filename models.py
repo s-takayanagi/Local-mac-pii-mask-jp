@@ -34,3 +34,5 @@ class ProcessResult:
     # keys: "layer1"〜"layer4" → ファイル全体の合計件数
     replacements_log: list[dict] = field(default_factory=list)
     # each entry: {"location": str, "original": str, "tag": str, "layer": str}
+    warnings: list[str] = field(default_factory=list)
+    # 未マスクの可能性がある箇所の警告メッセージ

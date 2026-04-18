@@ -5,6 +5,11 @@ from core.pipeline import mask_text
 from file_handlers.base import masked_output_path
 from models import ProcessResult
 
+_LABEL_TO_TAG: dict[str, str] = {
+    "氏名": "[氏名]",
+    "ふりがな": "[氏名]",
+}
+
 
 def _merge_layer_counts(totals: dict, counts: dict) -> None:
     for k, v in counts.items():
@@ -33,6 +38,7 @@ def process_docx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
     doc = Document(output)
     total = 0
     errors: list[str] = []
+    warnings: list[str] = []
     layer_totals: dict = {}
     replacements_log: list[dict] = []
 
@@ -47,20 +53,49 @@ def process_docx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
         except Exception as e:
             errors.append(f"paragraph: {e}")
 
-    for tbl_idx, table in enumerate(doc.tables):
+    def _process_table(table, loc_prefix: str) -> int:
+        subtotal = 0
         for row_idx, row in enumerate(table.rows):
-            for col_idx, cell in enumerate(row.cells):
+            cells = row.cells
+            label_tag: str | None = None
+            label_text: str = ""
+            if cells:
+                label_text = cells[0].text.strip()
+                label_tag = _LABEL_TO_TAG.get(label_text)
+
+            for col_idx, cell in enumerate(cells):
+                loc = f"{loc_prefix}/行{row_idx + 1}/列{col_idx + 1}"
+                cell_replaced = 0
+
                 for para in cell.paragraphs:
                     try:
                         count, lc, errs, reps = _mask_paragraph(para, model, lm_studio_url, enabled_layers, excluded_tags)
-                        total += count
+                        subtotal += count
+                        cell_replaced += count
                         _merge_layer_counts(layer_totals, lc)
                         errors.extend(errs)
-                        loc = f"表{tbl_idx + 1}/行{row_idx + 1}/列{col_idx + 1}"
                         for r in reps:
                             replacements_log.append({**r, "location": loc})
                     except Exception as e:
                         errors.append(f"table cell: {e}")
+
+                # 氏名/ふりがなラベルの隣の値セルが未マスクなら警告
+                if (
+                    col_idx == 1
+                    and label_tag is not None
+                    and cell_replaced == 0
+                    and cell.text.strip()
+                ):
+                    warnings.append(
+                        f"{loc} の「{cell.text.strip()[:30]}」は{label_text}の可能性があります。マスキングされていないことを確認してください。"
+                    )
+
+                for nested_table in cell.tables:
+                    subtotal += _process_table(nested_table, f"{loc}(nested)")
+        return subtotal
+
+    for tbl_idx, table in enumerate(doc.tables):
+        total += _process_table(table, f"表{tbl_idx + 1}")
 
     doc.save(output)
     return ProcessResult(
@@ -69,4 +104,5 @@ def process_docx(path: Path, model: str, lm_studio_url: str, enabled_layers: set
         errors=errors,
         layer_totals=layer_totals,
         replacements_log=replacements_log,
+        warnings=warnings,
     )

@@ -5,7 +5,7 @@ import json
 from unittest.mock import MagicMock, patch
 import requests
 
-from core.layer3_llm import call_masker, call_reviewer, _revert_excluded
+from core.layer3_llm import call_masker, call_reviewer, _revert_excluded, _is_lfm2_model, _apply_lfm2_entities, LFM2_SYSTEM
 
 
 def _make_response(body: dict, status: int = 200):
@@ -179,3 +179,66 @@ def test_call_reviewer_additional_none_causes_error():
     with patch("requests.post", return_value=_make_response(body)):
         result = call_reviewer("[氏名]", "test-model", "http://localhost:1234/v1/chat/completions")
     assert result is None
+
+
+# --- LFM2 モード ---
+
+def test_is_lfm2_model_detected():
+    assert _is_lfm2_model("lfm2-350m-pii-extract-jp") is True
+    assert _is_lfm2_model("LFM2-350M-PII-Extract-JP") is True
+    assert _is_lfm2_model("LFM2-1B-PII-Extract-JP") is True
+
+
+def test_is_lfm2_model_not_detected():
+    assert _is_lfm2_model("qwen2.5-7b-instruct") is False
+    assert _is_lfm2_model("gpt-4o") is False
+    assert _is_lfm2_model("pii-extract-custom") is False
+
+
+def test_apply_lfm2_entities_masks_correctly():
+    raw = {"human_name": ["山田太郎"], "company_name": ["株式会社サンプル"]}
+    masked, reps = _apply_lfm2_entities("山田太郎 株式会社サンプル", raw, set())
+    assert "[氏名]" in masked
+    assert "[会社名]" in masked
+    assert any(r["tag"] == "[氏名]" for r in reps)
+    assert any(r["tag"] == "[会社名]" for r in reps)
+
+
+def test_apply_lfm2_entities_excluded_tags():
+    raw = {"human_name": ["山田太郎"], "phone_number": ["090-1234-5678"]}
+    masked, reps = _apply_lfm2_entities("山田太郎 090-1234-5678", raw, {"[電話番号]"})
+    assert "[氏名]" in masked
+    assert "090-1234-5678" in masked
+    assert not any(r["tag"] == "[電話番号]" for r in reps)
+
+
+def test_call_masker_lfm2_mode():
+    body = {"human_name": ["山田太郎"], "email_address": ["test@example.com"], "company_name": []}
+    with patch("requests.post", return_value=_make_response(body)) as mock_post:
+        result = call_masker(
+            "山田太郎のメール: test@example.com",
+            "lfm2-350m-pii-extract-jp",
+            "http://localhost:1234/v1/chat/completions",
+        )
+    assert result is not None
+    assert "[氏名]" in result["masked_text"]
+    assert "[メール]" in result["masked_text"]
+    assert any(r["tag"] == "[氏名]" for r in result["replacements"])
+    # LFM2 専用システムプロンプトが使われていること
+    sent_payload = mock_post.call_args[1]["json"]
+    assert sent_payload["messages"][0]["content"] == LFM2_SYSTEM
+    # temperature=0 で呼ばれていること
+    assert sent_payload["temperature"] == 0
+
+
+def test_call_reviewer_lfm2_mode():
+    body = {"human_name": ["山田太郎"], "address": []}
+    with patch("requests.post", return_value=_make_response(body)):
+        result = call_reviewer(
+            "山田太郎のレポート",
+            "lfm2-350m-pii-extract-jp",
+            "http://localhost:1234/v1/chat/completions",
+        )
+    assert result is not None
+    assert "[氏名]" in result["final_text"]
+    assert result["confidence"] == 0.95

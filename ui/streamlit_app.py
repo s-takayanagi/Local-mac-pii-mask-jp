@@ -237,6 +237,12 @@ def main() -> None:
 
         selected_model = st.selectbox("モデル", lm_status["models"])
 
+        if selected_model and "lfm2" in selected_model.lower():
+            st.info(
+                "**特化型モード**: LFM2-350M-PII-Extract-JP を検出しました。\n\n"
+                "専用システムプロンプトと出力パーサーを使用します（汎用 LLM のシステムプロンプトは送信されません）。"
+            )
+
         st.divider()
         st.markdown("**処理レイヤー**")
         use_layer1 = st.checkbox("1️⃣ 正規表現", value=True)

@@ -99,7 +99,7 @@ def mask_text(
     if "layer4" in enabled:
         logger.info("[Layer 4] LLM レビュー 開始")
         t0 = time.monotonic()
-        reviewer_result = call_reviewer(masked, model, lm_studio_url, excluded_tags)
+        reviewer_result = call_reviewer(masked, model, lm_studio_url, excluded_tags, original_text=text)
         if reviewer_result is None:
             logger.warning("[Layer 4] 失敗 — Masker 結果で返却")
             errors = []

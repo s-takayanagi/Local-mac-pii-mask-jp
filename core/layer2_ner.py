@@ -59,7 +59,7 @@ def apply_ner(text: str) -> tuple[str, list[dict]]:
         tag = _LABEL_TAG.get(ent.label_)
         if tag is None:
             continue
-        if tag == "[住所]" and _is_admin_unit(ent.text):
+        if _is_admin_unit(ent.text):
             continue
         spans.append((ent.start_char, ent.end_char, tag))
         replacements.append({"original": ent.text, "tag": tag})

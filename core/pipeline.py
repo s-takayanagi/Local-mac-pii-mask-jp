@@ -81,10 +81,13 @@ def mask_text(
                 layer_counts={"layer1": len(l1_reps), "layer2": len(l2_reps), "layer3": 0, "layer4": 0},
             )
         l3_reps = masker_result.get("replacements", [])
+        if not isinstance(l3_reps, list):
+            l3_reps = []
         logger.info("[Layer 3] 完了 | 検出=%d件 | 経過=%.3fs", len(l3_reps), time.monotonic() - t0)
         for r in l3_reps:
             logger.debug("[Layer 3] '%s' → '%s'", r.get("original"), r.get("tag"))
-        masked = masker_result.get("masked_text", l2_text)
+        masked_val = masker_result.get("masked_text", l2_text)
+        masked = masked_val if isinstance(masked_val, str) and masked_val else l2_text
     else:
         logger.info("[Layer 3] スキップ（無効）")
 
@@ -114,8 +117,13 @@ def mask_text(
                 layer_counts={"layer1": len(l1_reps), "layer2": len(l2_reps), "layer3": len(l3_reps), "layer4": 0},
             )
         additional = reviewer_result.get("additional", [])
+        if not isinstance(additional, list):
+            additional = []
         confidence = reviewer_result.get("confidence", 0.9)
-        final = reviewer_result.get("final_text", masked)
+        if not isinstance(confidence, (int, float)):
+            confidence = 0.9
+        final_val = reviewer_result.get("final_text", masked)
+        final = final_val if isinstance(final_val, str) and final_val else masked
         logger.info(
             "[Layer 4] 完了 | 追加検出=%d件 | confidence=%.2f | 経過=%.3fs",
             len(additional), confidence, time.monotonic() - t0,

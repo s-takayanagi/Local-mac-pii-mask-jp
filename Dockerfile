@@ -24,9 +24,6 @@ RUN uv pip install --system --no-cache \
     ja-ginza-electra \
     spacy
 
-# GiNZA モデルをイメージに焼き込む（コンテナ起動後はオフライン動作）
-RUN python -m spacy download ja_ginza_electra
-
 # アプリコードをコピー
 COPY . .
 

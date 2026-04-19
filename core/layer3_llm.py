@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import time
 import requests
 
@@ -24,6 +25,12 @@ MASKER_SYSTEM = """\
 - すでに[タグ]形式の箇所は変更しない
 - 一般的な地名・公的機関名（東京都・国税庁等）は対象外
 - テキストの意味・構造を壊さない
+- 以下の「属性ラベル」はマスクしない（列見出し・項目名であり、値ではない）:
+  氏名 / ふりがな / フリガナ / 住所 / 電話番号 / メール / メールアドレス /
+  郵便番号 / 会社名 / 組織名 / 部署 / 役職 / 顧客ID / 顧客名 / 社員番号 /
+  マイナンバー / 法人番号 / 生年月日 / 年齢 / 性別 / 訪問日 / 契約日 /
+  備考 / 担当者名 / 担当 など
+  → 値が伴う場合のみマスク対象（例: 「顧客名: 田中」の「田中」はマスク、「顧客名」自体は対象外）
 
 必ず以下のJSONのみ出力（前置き・説明不要）:
 {"masked_text": "...", "replacements": [{"original": "...", "tag": "..."}]}
@@ -71,6 +78,28 @@ _VALID_TAGS: frozenset[str] = frozenset({
     "[メール]", "[郵便番号]", "[URL]", "[識別番号]", "[個人情報]",
 })
 
+# 列見出し・属性ラベル（値ではない）。AI がこれら単独の語をマスク対象にしたら破棄する。
+_LABEL_BLOCKLIST: frozenset[str] = frozenset({
+    "氏名", "ふりがな", "フリガナ", "住所", "電話番号", "メール",
+    "メールアドレス", "郵便番号", "会社名", "組織名", "部署", "部門",
+    "役職", "顧客id", "顧客名", "社員番号", "社員id", "マイナンバー",
+    "法人番号", "生年月日", "年齢", "性別", "訪問日", "契約日",
+    "備考", "担当者名", "担当", "項目", "内容", "番号", "名前",
+})
+
+
+def _is_label_only(original: str) -> bool:
+    """original が属性ラベルのみで構成されるか判定する（「マイナンバー（法人番号）」等も含む）"""
+    if not original:
+        return False
+    normalized = re.sub(r"[（）()\s]+", "", original).lower()
+    if normalized in _LABEL_BLOCKLIST:
+        return True
+    parts = [p.strip().lower() for p in re.split(r"[（）()・/／]+", original) if p.strip()]
+    if parts and all(p in _LABEL_BLOCKLIST for p in parts):
+        return True
+    return False
+
 
 def _sanitize_replacements(
     text: str,
@@ -100,6 +129,10 @@ def _sanitize_replacements(
         if original.startswith("[") and original.endswith("]") and len(original) > 2:
             continue
         if tag not in _VALID_TAGS:
+            invalid_by_tag.setdefault(tag, []).append(original)
+            continue
+        if _is_label_only(original):
+            # 属性ラベル（顧客ID・訪問日等）を値として扱った誤検知。破棄して元に戻す。
             invalid_by_tag.setdefault(tag, []).append(original)
             continue
         valid.append(r)

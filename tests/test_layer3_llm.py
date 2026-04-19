@@ -174,14 +174,13 @@ def test_call_reviewer_connection_error():
 
 
 def test_call_reviewer_additional_none_tolerated():
-    # additional=None が返っても _call_lm_studio は例外を起こさず結果を返し、
-    # 呼び出し元（pipeline）が list チェックで空配列に正規化する
+    # additional=None が返っても call_reviewer 内で空リストに正規化される
     body = {"final_text": "[氏名]", "additional": None, "confidence": 0.9}
     with patch("requests.post", return_value=_make_response(body)):
         result = call_reviewer("[氏名]", "test-model", "http://localhost:1234/v1/chat/completions")
     assert result is not None
     assert result["final_text"] == "[氏名]"
-    assert result["additional"] is None  # 後段で list に正規化される
+    assert result["additional"] == []
 
 
 # --- LFM2 モード ---
@@ -278,3 +277,58 @@ def test_call_reviewer_lfm2_mode():
     assert result is not None
     assert "[氏名]" in result["final_text"]
     assert result["confidence"] == 0.95
+
+
+# --- 位置追跡: 部分文字列競合の回避 ---
+
+def test_lfm2_substring_does_not_corrupt_longer_match():
+    """短い『田中』が長い『田中太郎』の中身を奪わないこと"""
+    raw = {"human_name": ["田中太郎", "田中"]}
+    masked, reps = _apply_lfm2_entities("田中太郎と田中が会う", raw, set())
+    # 両者とも別個にマスクされる（田中太郎→[氏名]、田中→[氏名]）
+    assert masked == "[氏名]と[氏名]が会う"
+    assert len(reps) == 2
+    # 出現順: 田中太郎 が先
+    assert reps[0]["original"] == "田中太郎"
+    assert reps[1]["original"] == "田中"
+
+
+def test_lfm2_same_entity_multiple_occurrences():
+    raw = {"human_name": ["田中"]}
+    masked, reps = _apply_lfm2_entities("田中と田中が会議", raw, set())
+    assert masked == "[氏名]と[氏名]が会議"
+    assert len(reps) == 2
+    assert all(r["original"] == "田中" for r in reps)
+
+
+def test_lfm2_excluded_tag_skipped():
+    raw = {"human_name": ["山田"], "phone_number": ["090-1111-2222"]}
+    masked, reps = _apply_lfm2_entities(
+        "山田 090-1111-2222", raw, {"[氏名]"}
+    )
+    assert "山田" in masked
+    assert "[電話番号]" in masked
+    assert all(r["tag"] != "[氏名]" for r in reps)
+
+
+# --- JSON パース堅牢性 ---
+
+def test_call_masker_handles_extra_trailing_text():
+    """JSON の後にゴミが付いていても raw_decode で先頭の JSON を取り出せる"""
+    content = (
+        '{"masked_text": "[氏名]さん", '
+        '"replacements": [{"original": "山田", "tag": "[氏名]"}]}'
+        "\nNote: this is extra text }"
+    )
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "choices": [{"message": {"content": content}}],
+        "usage": {},
+    }
+    resp.raise_for_status = MagicMock()
+    with patch("requests.post", return_value=resp):
+        result = call_masker("山田さん", "qwen-test",
+                             "http://localhost:1234/v1/chat/completions")
+    assert result is not None
+    assert result["masked_text"] == "[氏名]さん"

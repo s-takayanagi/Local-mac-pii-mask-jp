@@ -2,7 +2,10 @@ import logging
 import threading
 from datetime import datetime, timezone, timedelta
 
+from config import LOG_LEVEL
+
 _JST = timezone(timedelta(hours=9))
+_DEFAULT_LEVEL = getattr(logging, LOG_LEVEL, logging.INFO)
 
 
 class _JSTFormatter(logging.Formatter):
@@ -17,7 +20,7 @@ class SessionStateLogHandler(logging.Handler):
     SESSION_KEY = "system_logs"
     CONTAINER_KEY = "_log_display_container"
 
-    def __init__(self, level: int = logging.DEBUG) -> None:
+    def __init__(self, level: int = _DEFAULT_LEVEL) -> None:
         super().__init__(level)
         fmt = "%(asctime)s JST [%(levelname)s] %(name)s: %(message)s"
         self.setFormatter(_JSTFormatter(fmt, datefmt="%H:%M:%S"))

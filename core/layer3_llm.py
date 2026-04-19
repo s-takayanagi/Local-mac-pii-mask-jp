@@ -24,6 +24,8 @@ MASKER_SYSTEM = """\
 ルール:
 - すでに[タグ]形式の箇所は変更しない
 - 一般的な地名・公的機関名（東京都・国税庁等）は対象外
+- 部署名・部門名（〜部・〜課・〜室・〜チーム・〜グループ・〜本部・〜センター等）は[会社名]ではない。対象外とする
+- 役割・担当記述（〜担当・〜責任者・東日本担当等）は個人情報ではない。対象外とする
 - テキストの意味・構造を壊さない
 - 以下の「属性ラベル」はマスクしない（列見出し・項目名であり、値ではない）:
   氏名 / ふりがな / フリガナ / 住所 / 電話番号 / メール / メールアドレス /
@@ -47,11 +49,13 @@ REVIEWER_SYSTEM = """\
 
 確認ポイント:
 1. マスク済みテキストに残存している人名（日本語・英語）・住所の断片・会社名
-2. 原文と比較して過検出されたマスク（一般名詞・部署名・法律上の甲乙等）を元に戻す
+2. 原文と比較して過検出されたマスク（一般名詞・部署名・役割記述・法律上の甲乙等）を元に戻す
 
 ルール:
 - すでに[タグ]形式の箇所はそのまま保持（過検出でない限り）
-- 過検出（一般名詞・地名・部署名・甲乙等の法律用語）は final_text で元の語に戻す
+- 過検出（一般名詞・地名・部署名・役割記述・甲乙等の法律用語）は final_text で元の語に戻す
+- 部署名（〜部・〜課・〜室・〜チーム・〜グループ等）を[会社名]にマスクしていたら元に戻す
+- 役割・担当記述（〜担当・東日本担当等）をマスクしていたら元に戻す
 - 変更がない場合も final_text にマスク済みテキストをそのまま返す
 
 必ず以下のJSONのみ出力（前置き・説明不要）:
@@ -88,8 +92,14 @@ _LABEL_BLOCKLIST: frozenset[str] = frozenset({
 })
 
 
+_DEPT_SUFFIX_RE = re.compile(
+    r"(?:部|課|室|係|局|本部|センター|チーム|グループ|ユニット|部門|事業部|統括部)$"
+)
+_ROLE_SUFFIX_RE = re.compile(r"担当|責任者|リーダー|マネージャー|ディレクター")
+
+
 def _is_label_only(original: str) -> bool:
-    """original が属性ラベルのみで構成されるか判定する（「マイナンバー（法人番号）」等も含む）"""
+    """original が属性ラベル・部署名・役割記述のみで構成されるか判定する"""
     if not original:
         return False
     normalized = re.sub(r"[（）()\s]+", "", original).lower()
@@ -97,6 +107,13 @@ def _is_label_only(original: str) -> bool:
         return True
     parts = [p.strip().lower() for p in re.split(r"[（）()・/／]+", original) if p.strip()]
     if parts and all(p in _LABEL_BLOCKLIST for p in parts):
+        return True
+    # 部署名パターン（〜部・〜課・〜室・〜チーム等）
+    stripped = re.sub(r"[（）()\s]", "", original)
+    if _DEPT_SUFFIX_RE.search(stripped):
+        return True
+    # 役割・担当記述（東日本担当・西日本責任者等）
+    if _ROLE_SUFFIX_RE.search(original):
         return True
     return False
 

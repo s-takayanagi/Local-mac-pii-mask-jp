@@ -68,7 +68,11 @@ def mask_text(
     # Layer 3: LLM マスキング
     l3_reps: list[dict] = []
     masked = l2_text
-    if "layer3" in enabled:
+    _MASKED_TAGS = ("[氏名]", "[住所]", "[会社名]", "[電話番号]", "[メール]", "[郵便番号]", "[URL]", "[識別番号]", "[個人情報]")
+    _has_masked_tokens = any(tag in l2_text for tag in _MASKED_TAGS)
+    if "layer3" in enabled and _has_masked_tokens:
+        logger.info("[Layer 3] スキップ（L1/L2 マスク済みトークンあり — 既存トークン保護）")
+    elif "layer3" in enabled:
         logger.info("[Layer 3] LLM マスキング 開始")
         t0 = time.monotonic()
         masker_result = call_masker(l2_text, model, lm_studio_url, excluded_tags)

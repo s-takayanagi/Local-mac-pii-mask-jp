@@ -9,6 +9,7 @@
 |---------|------|
 | [configuration.md](configuration.md) | `config.py` の設定項目・環境変数・Docker デプロイ手順・MCP 接続設定・ネットワークセキュリティ |
 | [development.md](development.md) | ローカル開発環境セットアップ・依存関係・テスト実行・新機能追加ガイド |
+| [manual_test_results.md](manual_test_results.md) | 実サンプル文書での手動テスト結果（LFM2 / Gemma-4 E4B の速度・検出件数比較） |
 
 ## このフォルダを読む目的
 

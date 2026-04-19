@@ -1,7 +1,7 @@
 # PII Masker
 
 日本語文書（.xlsx / .pptx / .docx）の個人情報をローカル環境で一括マスキングするツールです。  
-PIIはクラウドに一切送信されません。LM Studio 上のローカル LLM（推奨: Gemma 3n E4B / その他動作確認済み: Qwen3 1.7B / LFM2-350M-PII-Extract-JP）が処理します。
+PIIはクラウドに一切送信されません。LM Studio 上のローカル LLM（推奨: Gemma-4 E4B / その他動作確認済み: Qwen3 1.7B / LFM2-350M-PII-Extract-JP）が処理します。
 
 ```
 [社内文書（PII含む）]
@@ -21,7 +21,7 @@ PIIはクラウドに一切送信されません。LM Studio 上のローカル 
 | ツール | 用途 | 備考 |
 |--------|------|------|
 | [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Python・GiNZA・アプリ実行環境 | Python のローカルインストール不要 |
-| [LM Studio](https://lmstudio.ai/) | ローカル LLM の推論（推奨: Gemma 3n E4B） | 完全オフライン |
+| [LM Studio](https://lmstudio.ai/) | ローカル LLM の推論（推奨: Gemma-4 E4B） | 完全オフライン |
 | [Claude Desktop](https://claude.ai/download) | MCPツールとして呼び出す | 任意 |
 
 Python・pip・uv・GiNZA などは **すべて Docker イメージ内に封じ込まれます**。
@@ -48,7 +48,7 @@ Mac ホスト
 │       ├── Streamlit UI  → localhost:8501
 │       └── MCP Server    → stdio（Claude Desktop から呼び出し）
 └── LM Studio  → localhost:1234
-    └── Gemma 3n E4B（推奨） / Qwen3 1.7B / LFM2-350M-PII-Extract-JP 等
+    └── Gemma-4 E4B（推奨） / Qwen3 1.7B / LFM2-350M-PII-Extract-JP 等
 ```
 
 コンテナ内から LM Studio には `host.docker.internal:1234` で接続します。
@@ -61,9 +61,11 @@ Mac ホスト
 
 1. LM Studio を起動
 2. 以下のいずれかのモデルをダウンロード（手動テスト済み）
-   - `google/gemma-3n-e4b`（**推奨**・汎用 LLM モード）
+   - `google/gemma-4-e4b`（**推奨・品質重視**・汎用 LLM モード）
    - `qwen/qwen3-1.7b`（汎用 LLM モード・軽量）
-   - `LFM2-350M-PII-Extract-JP`（LFM2 専用モード・約 400MB）
+   - `LFM2-350M-PII-Extract-JP`（LFM2 専用モード・約 400MB・**高速重視**）
+
+   ※ 各モデルの検出件数・処理時間の比較は [docs/3_設定・開発/manual_test_results.md](docs/3_設定・開発/manual_test_results.md) を参照。
 3. 「Local Server」タブでサーバーを起動（デフォルトポート: 1234）
 
 ### 2. Docker イメージのビルド
@@ -222,7 +224,7 @@ docker run --rm -v "$(pwd)":/app -w /app --entrypoint "" pii-masker \
 |--------|-----------|------|
 | `LM_STUDIO_HOST` | `host.docker.internal` | LM Studio のホスト名 |
 | `LM_STUDIO_PORT` | `1234` | LM Studio のポート番号 |
-| `LM_STUDIO_MODEL` | `google/gemma-3n-e4b` | 使用するモデル名（LM Studio のモデル ID と一致させる）。推奨: `google/gemma-3n-e4b`。その他動作確認済み: `qwen/qwen3-1.7b` / `LFM2-350M-PII-Extract-JP` |
+| `LM_STUDIO_MODEL` | `google/gemma-4-e4b` | 使用するモデル名（LM Studio のモデル ID と一致させる）。推奨: `google/gemma-4-e4b`。その他動作確認済み: `qwen/qwen3-1.7b` / `LFM2-350M-PII-Extract-JP` |
 
 ---
 
@@ -244,7 +246,7 @@ bash build/build_docker.sh v1.0.0
 |---------------|--------|
 | OS + 業務アプリ | ~4GB |
 | LM Studio 本体 | ~0.5GB |
-| LLM モデル（推奨: Gemma 3n E4B） | ~0.4〜4GB |
+| LLM モデル（推奨: Gemma-4 E4B） | ~0.4〜4GB |
 | GiNZA ja_ginza_electra | ~1.5GB |
 | PII Masker コンテナ | ~0.5GB |
 | **合計** | **~7〜10GB** |
@@ -269,7 +271,7 @@ MIT
 
 | コンポーネント | ライセンス | 備考 |
 |---|---|---|
-| Gemma 3n E4B | Gemma Terms of Use | **推奨モデル**。動作確認済み・汎用 LLM モード |
+| Gemma-4 E4B | Gemma Terms of Use | **推奨モデル**。動作確認済み・汎用 LLM モード |
 | Qwen3 1.7B | Apache 2.0 | 動作確認済み。軽量な汎用 LLM モード |
 | LFM2-350M-PII-Extract-JP | LFM Open License v1.0 | 動作確認済み。特化型モードで対応。商用利用は売上 $10M 以上の場合は要ライセンス確認 |
 | GiNZA v5 + ja_ginza_electra | MIT | |

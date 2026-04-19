@@ -6,7 +6,7 @@
 |---------|------------|---------|
 | LM Studio ホスト | `host.docker.internal` | `LM_STUDIO_HOST` |
 | LM Studio ポート | `1234` | `LM_STUDIO_PORT` |
-| 使用モデル | `google/gemma-3n-e4b` | `LM_STUDIO_MODEL` |
+| 使用モデル | `google/gemma-4-e4b` | `LM_STUDIO_MODEL` |
 | LM Studio API URL | `http://{HOST}:{PORT}/v1/chat/completions` | — |
 | 出力ファイルサフィックス | `_masked` | — |
 | リクエストタイムアウト | `120` 秒 | — |

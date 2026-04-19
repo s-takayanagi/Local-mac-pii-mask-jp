@@ -6,7 +6,7 @@ _host = os.environ.get("LM_STUDIO_HOST", "host.docker.internal")
 _port = os.environ.get("LM_STUDIO_PORT", "1234")
 
 LM_STUDIO_URL = f"http://{_host}:{_port}/v1/chat/completions"
-DEFAULT_MODEL = os.environ.get("LM_STUDIO_MODEL", "qwen/qwen3.5-9b")
+DEFAULT_MODEL = os.environ.get("LM_STUDIO_MODEL", "google/gemma-3n-e4b")
 OUTPUT_SUFFIX = "_masked"
 SUPPORTED_EXTENSIONS = [".xlsx", ".pptx", ".docx"]
 REQUEST_TIMEOUT = 120

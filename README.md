@@ -71,6 +71,27 @@ Claude Desktop 連携（MCP）を使う場合は `install.command` 実行時に 
 
 ---
 
+### .dmg で配布する（社内展開向け）
+
+配布担当者が `.dmg` を作成し、エンドユーザーに渡す運用も可能です。
+
+```bash
+# 署名なし（Gatekeeper 警告は右クリック→開くで回避可能）
+bash build/make_dmg.sh
+
+# 署名あり（Apple Developer Program 加入時）
+DEVELOPER_ID="Developer ID Application: Your Name (XXXXXXXXXX)" bash build/make_dmg.sh
+```
+
+`dist/PII-Masker.dmg` が生成されます。エンドユーザーは:
+
+1. `.dmg` をダブルクリック
+2. 「PII Masker」フォルダを **Applications** にドラッグ
+3. `/Applications/PII Masker/Install PII Masker.app` を右クリック → 「開く」（初回のみ）
+4. 以降は `Start PII Masker.app` / `Stop PII Masker.app` をダブルクリック
+
+---
+
 ## セットアップ（手動）
 
 ### 1. LM Studio の準備

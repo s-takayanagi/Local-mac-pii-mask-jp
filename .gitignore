@@ -72,3 +72,4 @@ config.local.py
 ._*
 .Spotlight-V100
 .Trashes
+dist/

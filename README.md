@@ -55,7 +55,44 @@ Mac ホスト
 
 ---
 
-## セットアップ
+## かんたん導入（非エンジニア向け・Mac）
+
+ターミナル操作や JSON 編集は不要です。
+
+1. [Docker Desktop](https://www.docker.com/products/docker-desktop/) をインストール・起動
+2. [LM Studio](https://lmstudio.ai/) をインストールし、モデル（推奨: `google/gemma-4-e4b`）をダウンロード → Local Server を起動
+3. このリポジトリを ZIP ダウンロード → 解凍
+4. **`install.command` をダブルクリック**（初回のみ・Docker イメージをビルド。5〜10分）
+   - 「開発元を確認できないため開けません」と出たら、Finder で右クリック → 「開く」
+5. **`start.command` をダブルクリック**（ブラウザで UI が開きます）
+6. 停止するときは **`stop.command`**
+
+Claude Desktop 連携（MCP）を使う場合は `install.command` 実行時に y と入力すると自動設定されます。
+
+---
+
+### .dmg で配布する（社内展開向け）
+
+配布担当者が `.dmg` を作成し、エンドユーザーに渡す運用も可能です。
+
+```bash
+# 署名なし（Gatekeeper 警告は右クリック→開くで回避可能）
+bash build/make_dmg.sh
+
+# 署名あり（Apple Developer Program 加入時）
+DEVELOPER_ID="Developer ID Application: Your Name (XXXXXXXXXX)" bash build/make_dmg.sh
+```
+
+`dist/PII-Masker.dmg` が生成されます。エンドユーザーは:
+
+1. `.dmg` をダブルクリック
+2. 「PII Masker」フォルダを **Applications** にドラッグ
+3. `/Applications/PII Masker/Install PII Masker.app` を右クリック → 「開く」（初回のみ）
+4. 以降は `Start PII Masker.app` / `Stop PII Masker.app` をダブルクリック
+
+---
+
+## セットアップ（手動）
 
 ### 1. LM Studio の準備
 

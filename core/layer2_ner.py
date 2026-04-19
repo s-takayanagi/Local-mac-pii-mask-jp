@@ -5,6 +5,13 @@ logger = logging.getLogger(__name__)
 
 _nlp = None
 
+# spaCy が組織名と誤認識しやすい地理的広域名称（単独で出現した場合のみ除外）
+_GEO_REGION_BLOCKLIST: frozenset[str] = frozenset({
+    "東日本", "西日本", "北日本", "南日本",
+    "東北", "北陸", "関東", "関西", "近畿", "中部", "中国", "四国", "九州",
+    "北関東", "南関東", "首都圏", "京阪神", "中京",
+})
+
 _ADMIN_PREFIXES = (
     "北海道", "青森", "岩手", "宮城", "秋田", "山形", "福島",
     "茨城", "栃木", "群馬", "埼玉", "千葉", "東京", "神奈川",
@@ -71,6 +78,10 @@ def apply_ner(text: str, excluded_tags: set[str] | None = None) -> tuple[str, li
         if tag in excluded:
             continue
         if _is_admin_unit(ent.text):
+            continue
+        # 地理的広域名称（東日本・関東等）を会社名として誤検知するケースを除外
+        if tag == "[会社名]" and ent.text in _GEO_REGION_BLOCKLIST:
+            logger.debug("[Layer 2] 地理的広域名称を除外: '%s'", ent.text)
             continue
         # NER が [メール] と判定しても @ を含まない場合は誤検知として除外
         if tag == "[メール]" and "@" not in ent.text:

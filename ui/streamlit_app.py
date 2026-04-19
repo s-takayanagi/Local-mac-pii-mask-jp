@@ -182,7 +182,13 @@ def _render_system_log(container, sys_logs: list[str], max_lines: int = 200) -> 
             st.caption(f"最新 {max_lines} 行を表示中（合計 {len(sys_logs)} 行）")
 
 
-def run_masking(folder: str, model: str, enabled_layers: set[str], excluded_tags: set[str] | None = None) -> None:
+def run_masking(
+    folder: str,
+    model: str,
+    enabled_layers: set[str],
+    excluded_tags: set[str] | None = None,
+    max_workers: int = 1,
+) -> None:
     folder_path = Path(folder)
     if not folder_path.is_dir():
         st.error(f"フォルダが見つかりません: {folder}")
@@ -218,7 +224,9 @@ def run_masking(folder: str, model: str, enabled_layers: set[str], excluded_tags
 
         logging.getLogger(__name__).info("=== ファイル処理開始: %s ===", f.name)
         try:
-            result = _HANDLERS[f.suffix.lower()](f, model, LM_STUDIO_URL, enabled_layers, excluded_tags)
+            result = _HANDLERS[f.suffix.lower()](
+                f, model, LM_STUDIO_URL, enabled_layers, excluded_tags, max_workers
+            )
             file_entries = [{**r, "file": f.name} for r in result.replacements_log]
             all_log_entries.extend(file_entries)
             logging.getLogger(__name__).info(
@@ -308,6 +316,30 @@ def main() -> None:
             enabled_layers.add("layer4")
 
         st.divider()
+        st.markdown("**並列処理**")
+        use_parallel = st.checkbox(
+            "並列処理で高速化",
+            value=False,
+            help=(
+                "セル/段落単位の AI マスキングを同時に複数リクエストして高速化します。\n\n"
+                "⚠️ **メモリ利用量に注意**: 並列数を増やすと LM Studio 側のメモリ消費とGPU/CPU負荷が上がります。\n"
+                "16GB メモリ搭載の M2 Mac では 4 程度を推奨。"
+            ),
+        )
+        if use_parallel:
+            max_workers = st.number_input(
+                "並列数",
+                min_value=2,
+                max_value=32,
+                value=4,
+                step=1,
+                help="同時に送信する AI リクエスト数。大きいほど速いがメモリを消費します。",
+            )
+            st.caption("⚠️ LM Studio のメモリ・GPU負荷を監視してください。不安定な場合は数値を下げてください。")
+        else:
+            max_workers = 1
+
+        st.divider()
         st.markdown("**除外する項目**")
         excluded_tags: set[str] = set()
         for label, tag in _PII_CATEGORIES:
@@ -330,7 +362,7 @@ def main() -> None:
         st.session_state["done"] = False
         st.session_state["all_log_entries"] = []
         # system_logs は install_log_handler 内で初期化されるためここでは触らない
-        run_masking(folder, selected_model, enabled_layers, excluded_tags)
+        run_masking(folder, selected_model, enabled_layers, excluded_tags, int(max_workers))
 
     if st.session_state.get("done"):
         results = st.session_state.get("results", [])

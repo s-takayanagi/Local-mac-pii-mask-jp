@@ -103,10 +103,22 @@ def mask_text(
         logger.info("[Layer 3] スキップ（無効）")
 
     # Layer 4: LLM レビュー
+    # 最適化: L1/L2/L3 が全て何も検出せず、かつテキストに変化もなければ L4 をスキップ。
+    # 「どのレイヤーも PII を見つけなかった」セルへの追加AI呼び出しを省いて高速化する。
+    skip_layer4 = (
+        "layer4" in enabled
+        and not l1_reps
+        and not l2_reps
+        and not l3_reps
+        and masked == text
+    )
+    if skip_layer4:
+        logger.info("[Layer 4] スキップ（Layer 1-3 が PII 未検出のため最適化）")
+
     additional: list[dict] = []
     confidence = 1.0
     final = masked
-    if "layer4" in enabled:
+    if "layer4" in enabled and not skip_layer4:
         logger.info("[Layer 4] LLM レビュー 開始")
         t0 = time.monotonic()
         reviewer_result = call_reviewer(masked, model, lm_studio_url, excluded_tags, original_text=text)
@@ -144,7 +156,7 @@ def mask_text(
         )
         for r in additional:
             logger.debug("[Layer 4] '%s' → '%s'", r.get("original"), r.get("tag"))
-    else:
+    elif "layer4" not in enabled:
         logger.info("[Layer 4] スキップ（無効）")
 
     errors = [f"Layer 2 NER: {l2_error}"] if l2_error else []

@@ -321,10 +321,11 @@ def main() -> None:
         st.divider()
         st.markdown("**並列処理**")
         use_parallel = st.checkbox(
-            "並列処理で高速化",
+            "並列処理を有効化",
             value=False,
             help=(
-                "セル/段落単位の AI マスキングを同時に複数リクエストして高速化します。\n\n"
+                "セル/段落単位の AI マスキングを同時に複数リクエストします。\n\n"
+                "⚠️ **必ずしも処理時間が短縮されるとは限りません**: LM Studio やハードウェアの状況により、逐次処理と同等以下になる場合があります。\n\n"
                 "⚠️ **メモリ利用量に注意**: 並列数を増やすと LM Studio 側のメモリ消費とGPU/CPU負荷が上がります。\n"
                 "16GB メモリ搭載の M2 Mac では 4 程度を推奨。"
             ),
@@ -336,11 +337,27 @@ def main() -> None:
                 max_value=32,
                 value=4,
                 step=1,
-                help="同時に送信する AI リクエスト数。大きいほど速いがメモリを消費します。",
+                help="同時に送信する AI リクエスト数。大きいほどメモリを消費します。処理時間の短縮は環境により異なります。",
             )
             st.caption("⚠️ LM Studio のメモリ・GPU負荷を監視してください。不安定な場合は数値を下げてください。")
         else:
             max_workers = 1
+
+        st.divider()
+        st.markdown("**ログレベル**")
+        _LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        _default_index = _LOG_LEVELS.index(LOG_LEVEL) if LOG_LEVEL in _LOG_LEVELS else 1
+        log_level = st.selectbox(
+            "表示するログレベル",
+            _LOG_LEVELS,
+            index=_default_index,
+            help="ルートロガーのログレベルを変更します。DEBUG ほど詳細な情報が表示されます。",
+        )
+        st.caption(
+            "⚠️ この設定はセッション限定です。ブラウザを閉じる・再読み込みすると既定値に戻ります。"
+            "永続的に変更するには環境変数 `LOG_LEVEL` を設定してください。"
+        )
+        logging.getLogger().setLevel(getattr(logging, log_level, logging.INFO))
 
         st.divider()
         st.markdown("**除外する項目**")

@@ -1,32 +1,13 @@
 import shutil
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import openpyxl
-from core.pipeline import mask_text
-from file_handlers.base import masked_output_path
+from file_handlers.base import masked_output_path, mask_texts
 from models import ProcessResult
 
 
 def _merge_numeric(totals: dict, values: dict) -> None:
     for k, v in values.items():
         totals[k] = totals.get(k, 0) + v
-
-
-def _mask_many(
-    texts: list[str],
-    model: str,
-    url: str,
-    enabled_layers: set[str] | None,
-    excluded_tags: set[str] | None,
-    max_workers: int,
-):
-    if max_workers > 1 and len(texts) > 1:
-        with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            return list(ex.map(
-                lambda t: mask_text(t, model, url, enabled_layers, excluded_tags),
-                texts,
-            ))
-    return [mask_text(t, model, url, enabled_layers, excluded_tags) for t in texts]
 
 
 def process_xlsx(
@@ -69,7 +50,7 @@ def process_xlsx(
 
     # Phase 2: mask (serial or parallel)
     texts = [t[2] for t in tasks]
-    results = _mask_many(texts, model, lm_studio_url, enabled_layers, excluded_tags, max_workers)
+    results = mask_texts(texts, model, lm_studio_url, enabled_layers, excluded_tags, max_workers)
 
     # Phase 3: write back & aggregate
     for (ws_title, cell, _orig), result in zip(tasks, results):

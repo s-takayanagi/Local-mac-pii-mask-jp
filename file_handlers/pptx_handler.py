@@ -1,10 +1,8 @@
 import shutil
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
-from core.pipeline import mask_text
-from file_handlers.base import masked_output_path
+from file_handlers.base import masked_output_path, mask_texts
 from models import ProcessResult
 
 
@@ -28,23 +26,6 @@ def _collect_runs(tf, loc: str, tasks: list):
             if not run.text or len(run.text.strip()) <= 1:
                 continue
             tasks.append((run, loc, run.text))
-
-
-def _mask_many(
-    texts: list[str],
-    model: str,
-    url: str,
-    enabled_layers: set[str] | None,
-    excluded_tags: set[str] | None,
-    max_workers: int,
-):
-    if max_workers > 1 and len(texts) > 1:
-        with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            return list(ex.map(
-                lambda t: mask_text(t, model, url, enabled_layers, excluded_tags),
-                texts,
-            ))
-    return [mask_text(t, model, url, enabled_layers, excluded_tags) for t in texts]
 
 
 def process_pptx(
@@ -95,7 +76,7 @@ def process_pptx(
 
     # Phase 2: mask
     texts = [t[2] for t in tasks]
-    results = _mask_many(texts, model, lm_studio_url, enabled_layers, excluded_tags, max_workers)
+    results = mask_texts(texts, model, lm_studio_url, enabled_layers, excluded_tags, max_workers)
 
     # Phase 3: write back & aggregate
     for (run, loc, _orig), result in zip(tasks, results):

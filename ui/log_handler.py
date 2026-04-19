@@ -1,4 +1,5 @@
 import logging
+import threading
 from datetime import datetime, timezone, timedelta
 
 _JST = timezone(timedelta(hours=9))
@@ -20,22 +21,33 @@ class SessionStateLogHandler(logging.Handler):
         super().__init__(level)
         fmt = "%(asctime)s JST [%(levelname)s] %(name)s: %(message)s"
         self.setFormatter(_JSTFormatter(fmt, datefmt="%H:%M:%S"))
+        # 並列ワーカーから同時に emit されるケースに備えたロック。
+        # append 自体は GIL で安全だが、session_state への読み書きと
+        # container への再レンダリングを一つの塊として直列化する。
+        self._lock = threading.Lock()
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
             import streamlit as st
-            if self.SESSION_KEY not in st.session_state:
-                st.session_state[self.SESSION_KEY] = []
-            st.session_state[self.SESSION_KEY].append(self.format(record))
-
-            container = st.session_state.get(self.CONTAINER_KEY)
-            if container is not None:
-                logs = st.session_state[self.SESSION_KEY]
-                visible = logs[-200:]
-                with container:
-                    st.code("\n".join(visible), language=None)
         except Exception:
-            pass
+            return
+
+        formatted = self.format(record)
+        with self._lock:
+            try:
+                if self.SESSION_KEY not in st.session_state:
+                    st.session_state[self.SESSION_KEY] = []
+                st.session_state[self.SESSION_KEY].append(formatted)
+
+                container = st.session_state.get(self.CONTAINER_KEY)
+                if container is not None:
+                    logs = st.session_state[self.SESSION_KEY]
+                    visible = logs[-200:]
+                    with container:
+                        st.code("\n".join(visible), language=None)
+            except Exception:
+                # Streamlit コンテキスト欠落等は握りつぶす（ログ表示の失敗でアプリを止めない）
+                pass
 
 
 def install() -> SessionStateLogHandler:

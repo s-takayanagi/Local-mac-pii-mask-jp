@@ -4,6 +4,11 @@ import re
 import time
 import requests
 
+try:
+    from config import LOG_PII_IN_DEBUG
+except Exception:
+    LOG_PII_IN_DEBUG = False
+
 logger = logging.getLogger(__name__)
 
 MASKER_SYSTEM = """\
@@ -184,8 +189,12 @@ def _is_lfm2_model(model: str) -> bool:
 def _apply_lfm2_entities(
     text: str, raw: dict, excluded_tags: set[str]
 ) -> tuple[str, list[dict]]:
-    """LFM2 形式 {"human_name": [...], ...} をテキストに適用して replacements を返す"""
-    # 長い文字列から先に処理して、部分文字列との競合（例: "田中" が "田中太郎" を壊す）を防ぐ
+    """LFM2 形式 {"human_name": [...], ...} をテキストに適用して replacements を返す。
+
+    位置追跡方式: 全エンティティのマッチ位置を列挙してから、
+    重複するスパンを除外し、末尾から順に置換する。
+    これにより「田中」が「田中太郎」の一部や既存の[氏名]タグの一部と誤って重なることを防ぐ。
+    """
     pending: list[tuple[str, str]] = []
     for key, tag in _LFM2_TAG_MAP.items():
         if tag in excluded_tags:
@@ -196,17 +205,38 @@ def _apply_lfm2_entities(
         for entity in entities:
             if isinstance(entity, str) and entity:
                 pending.append((entity, tag))
+
+    # 長いエンティティを優先してスパン登録することで、短い部分文字列が
+    # 長いエンティティ内部を奪うのを防ぐ。
     pending.sort(key=lambda x: len(x[0]), reverse=True)
 
-    replacements: list[dict] = []
-    masked = text
+    spans: list[tuple[int, int, str, str]] = []  # (start, end, entity, tag)
+    occupied: list[tuple[int, int]] = []
+
+    def _overlaps(s: int, e: int) -> bool:
+        return any(not (e <= os_ or s >= oe) for os_, oe in occupied)
+
     for entity, tag in pending:
-        occurrences = masked.count(entity)
-        if occurrences == 0:
-            continue
-        masked = masked.replace(entity, tag)
-        for _ in range(occurrences):
-            replacements.append({"original": entity, "tag": tag})
+        start = 0
+        ent_len = len(entity)
+        while True:
+            idx = text.find(entity, start)
+            if idx == -1:
+                break
+            end = idx + ent_len
+            if not _overlaps(idx, end):
+                spans.append((idx, end, entity, tag))
+                occupied.append((idx, end))
+            start = end
+
+    spans.sort(key=lambda x: x[0], reverse=True)
+    masked = text
+    replacements: list[dict] = []
+    for s, e, entity, tag in spans:
+        masked = masked[:s] + tag + masked[e:]
+        replacements.append({"original": entity, "tag": tag})
+    # 出現順（左→右）に並べ直して返す
+    replacements.reverse()
     return masked, replacements
 
 
@@ -229,7 +259,9 @@ def _call_lm_studio(
         "[LM Studio] %s リクエスト | model=%s | url=%s | プロンプト文字数=%d",
         role, model, url, prompt_chars,
     )
-    logger.debug("[LM Studio] %s 入力テキスト:\n%s", role, user)
+    # 入力テキストはマスク前の原文（PII）を含みうるため、明示的にフラグが立った場合のみ出力する。
+    if LOG_PII_IN_DEBUG:
+        logger.debug("[LM Studio] %s 入力テキスト:\n%s", role, user)
 
     start = time.monotonic()
     try:
@@ -255,18 +287,26 @@ def _call_lm_studio(
             )
 
         raw = raw_json["choices"][0]["message"]["content"]
-        logger.debug("[LM Studio] %s 生レスポンス:\n%s", role, raw)
+        # 生レスポンスはマスク後テキストだが LLM が原文を復唱する可能性があるため、同じ PII ガードを適用する。
+        if LOG_PII_IN_DEBUG:
+            logger.debug("[LM Studio] %s 生レスポンス:\n%s", role, raw)
 
         clean = raw.strip().removeprefix("```json").removesuffix("```").strip()
         start_idx = clean.find("{")
-        end_idx = clean.rfind("}") + 1
-        if start_idx == -1 or end_idx <= start_idx:
+        if start_idx == -1:
             logger.error(
                 "[LM Studio] %s JSON境界検出失敗 | raw先頭200文字: %s",
                 role, raw[:200],
             )
             return None
-        result = json.loads(clean[start_idx:end_idx])
+        # raw_decode は start_idx から一つの有効な JSON オブジェクトを厳密に切り出すため、
+        # rfind("}") に頼る方式より終端位置が明確で、複数の "}" を含むテキストでも安全。
+        try:
+            result, _end = json.JSONDecoder().raw_decode(clean, start_idx)
+        except json.JSONDecodeError as e:
+            logger.error("[LM Studio] %s JSONパースエラー | %s | raw先頭200文字: %s",
+                         role, e, raw[:200])
+            return None
 
         # 標準スキーマ (Masker: replacements / Reviewer: additional) と
         # LFM2 スキーマ（human_name / address 等の配列）の両方に対応してログ件数を算出

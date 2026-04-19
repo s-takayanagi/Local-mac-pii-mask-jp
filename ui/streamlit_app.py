@@ -3,14 +3,17 @@ import streamlit as st
 import requests
 from pathlib import Path
 
-from config import LM_STUDIO_URL, DEFAULT_MODEL, SUPPORTED_EXTENSIONS
+from config import LM_STUDIO_URL, DEFAULT_MODEL, SUPPORTED_EXTENSIONS, LOG_LEVEL
 from file_handlers.xlsx_handler import process_xlsx
 from file_handlers.pptx_handler import process_pptx
 from file_handlers.docx_handler import process_docx
 from ui.log_handler import install as install_log_handler, uninstall as uninstall_log_handler
 
+_log_level = getattr(logging, LOG_LEVEL, logging.INFO)
 if not logging.getLogger().handlers:
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=_log_level)
+else:
+    logging.getLogger().setLevel(_log_level)
 
 _HANDLERS = {".xlsx": process_xlsx, ".pptx": process_pptx, ".docx": process_docx}
 

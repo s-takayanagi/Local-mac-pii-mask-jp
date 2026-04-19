@@ -178,3 +178,27 @@ def test_multiple_pii_in_text():
 def test_replacement_contains_original():
     text, reps = apply_regex("090-1234-5678")
     assert reps[0]["original"] == "090-1234-5678"
+
+
+# --- スパン収集→後方置換の検証 ---
+
+def test_multiple_patterns_no_position_drift():
+    """複数パターンが混在しても、各マッチが正しい位置で置換される"""
+    text, reps = apply_regex(
+        "連絡: test@example.com, 090-1234-5678, 〒150-0001"
+    )
+    assert "[メール]" in text
+    assert "[電話番号]" in text
+    assert "[郵便番号]" in text
+    # タグ数と replacements 件数が一致
+    assert len(reps) == 3
+
+
+def test_overlapping_patterns_deduplicated():
+    """郵便番号パターンが住所内の数字に誤マッチしても、住所スパンが優先される"""
+    text, reps = apply_regex("東京都渋谷区代々木1-2-3 代々木マンション401")
+    # 住所としてマスクされ、内部の数字が [郵便番号] として重複マスクされない
+    assert "[住所]" in text
+    tags = [r["tag"] for r in reps]
+    # 同じ範囲が複数タグでマスクされていないこと
+    assert tags.count("[住所]") == 1

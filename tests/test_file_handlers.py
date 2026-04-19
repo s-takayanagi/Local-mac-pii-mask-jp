@@ -50,7 +50,7 @@ class TestXlsxHandler:
 
     def test_pii_cell_is_masked(self, tmp_path):
         path = self._create_xlsx(tmp_path, {"A1": "山田太郎のメール: test@example.com"})
-        with patch("file_handlers.xlsx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII):
             from file_handlers.xlsx_handler import process_xlsx
             result = process_xlsx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -61,7 +61,7 @@ class TestXlsxHandler:
 
     def test_numeric_cell_skipped(self, tmp_path):
         path = self._create_xlsx(tmp_path, {"A1": 12345, "B1": "山田太郎のメール: test@example.com"})
-        with patch("file_handlers.xlsx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII) as mock_mask:
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII) as mock_mask:
             from file_handlers.xlsx_handler import process_xlsx
             process_xlsx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -71,7 +71,7 @@ class TestXlsxHandler:
 
     def test_short_string_cell_skipped(self, tmp_path):
         path = self._create_xlsx(tmp_path, {"A1": "A", "B1": "山田太郎のメール: test@example.com"})
-        with patch("file_handlers.xlsx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII) as mock_mask:
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII) as mock_mask:
             from file_handlers.xlsx_handler import process_xlsx
             process_xlsx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -80,7 +80,7 @@ class TestXlsxHandler:
 
     def test_output_path_has_masked_suffix(self, tmp_path):
         path = self._create_xlsx(tmp_path, {"A1": "テスト文字列"})
-        with patch("file_handlers.xlsx_handler.mask_text", return_value=_MASK_RESULT_CLEAN):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_CLEAN):
             from file_handlers.xlsx_handler import process_xlsx
             result = process_xlsx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -90,7 +90,7 @@ class TestXlsxHandler:
     def test_original_file_not_overwritten(self, tmp_path):
         path = self._create_xlsx(tmp_path, {"A1": "山田太郎のメール: test@example.com"})
         original_content = path.read_bytes()
-        with patch("file_handlers.xlsx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII):
             from file_handlers.xlsx_handler import process_xlsx
             process_xlsx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -98,7 +98,7 @@ class TestXlsxHandler:
 
     def test_replacements_log_has_location(self, tmp_path):
         path = self._create_xlsx(tmp_path, {"A1": "山田太郎のメール: test@example.com"})
-        with patch("file_handlers.xlsx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII):
             from file_handlers.xlsx_handler import process_xlsx
             result = process_xlsx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -109,7 +109,7 @@ class TestXlsxHandler:
 
     def test_empty_workbook(self, tmp_path):
         path = self._create_xlsx(tmp_path, {})
-        with patch("file_handlers.xlsx_handler.mask_text", return_value=_MASK_RESULT_CLEAN) as mock_mask:
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_CLEAN) as mock_mask:
             from file_handlers.xlsx_handler import process_xlsx
             result = process_xlsx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -121,7 +121,7 @@ class TestXlsxHandler:
             "A1": "山田太郎のメール: test@example.com",
             "B1": "別のテキスト文字列",
         })
-        with patch("file_handlers.xlsx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII):
             from file_handlers.xlsx_handler import process_xlsx
             result = process_xlsx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -146,7 +146,7 @@ class TestPptxHandler:
 
     def test_text_frame_masked(self, tmp_path):
         path = self._create_pptx(tmp_path, ["山田太郎のメール: test@example.com"])
-        with patch("file_handlers.pptx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII):
             from file_handlers.pptx_handler import process_pptx
             result = process_pptx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -155,7 +155,7 @@ class TestPptxHandler:
 
     def test_output_path_has_masked_suffix(self, tmp_path):
         path = self._create_pptx(tmp_path, ["テスト"])
-        with patch("file_handlers.pptx_handler.mask_text", return_value=_MASK_RESULT_CLEAN):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_CLEAN):
             from file_handlers.pptx_handler import process_pptx
             result = process_pptx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -164,7 +164,7 @@ class TestPptxHandler:
     def test_original_not_overwritten(self, tmp_path):
         path = self._create_pptx(tmp_path, ["山田太郎"])
         original = path.read_bytes()
-        with patch("file_handlers.pptx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII):
             from file_handlers.pptx_handler import process_pptx
             process_pptx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -172,7 +172,7 @@ class TestPptxHandler:
 
     def test_replacements_log_has_slide_location(self, tmp_path):
         path = self._create_pptx(tmp_path, ["山田太郎のメール: test@example.com"])
-        with patch("file_handlers.pptx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII):
             from file_handlers.pptx_handler import process_pptx
             result = process_pptx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -181,7 +181,7 @@ class TestPptxHandler:
 
     def test_short_text_skipped(self, tmp_path):
         path = self._create_pptx(tmp_path, ["A"])
-        with patch("file_handlers.pptx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII) as mock_mask:
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII) as mock_mask:
             from file_handlers.pptx_handler import process_pptx
             process_pptx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -215,7 +215,7 @@ class TestDocxHandler:
 
     def test_paragraph_pii_masked(self, tmp_path):
         path = self._create_docx(tmp_path, ["山田太郎のメール: test@example.com"])
-        with patch("file_handlers.docx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII):
             from file_handlers.docx_handler import process_docx
             result = process_docx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -224,7 +224,7 @@ class TestDocxHandler:
 
     def test_output_path_has_masked_suffix(self, tmp_path):
         path = self._create_docx(tmp_path, ["テスト"])
-        with patch("file_handlers.docx_handler.mask_text", return_value=_MASK_RESULT_CLEAN):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_CLEAN):
             from file_handlers.docx_handler import process_docx
             result = process_docx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -233,7 +233,7 @@ class TestDocxHandler:
     def test_original_not_overwritten(self, tmp_path):
         path = self._create_docx(tmp_path, ["山田太郎"])
         original = path.read_bytes()
-        with patch("file_handlers.docx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII):
             from file_handlers.docx_handler import process_docx
             process_docx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -244,7 +244,7 @@ class TestDocxHandler:
             ["氏名", "山田太郎"],
             ["メール", "test@example.com"],
         ])
-        with patch("file_handlers.docx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII):
             from file_handlers.docx_handler import process_docx
             result = process_docx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -255,7 +255,7 @@ class TestDocxHandler:
         path = self._create_docx_with_table(tmp_path, [
             ["氏名", "山田太郎"],
         ])
-        with patch("file_handlers.docx_handler.mask_text", return_value=_MASK_RESULT_CLEAN):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_CLEAN):
             from file_handlers.docx_handler import process_docx
             result = process_docx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -264,7 +264,7 @@ class TestDocxHandler:
 
     def test_replacements_log_has_paragraph_location(self, tmp_path):
         path = self._create_docx(tmp_path, ["山田太郎のメール: test@example.com"])
-        with patch("file_handlers.docx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII):
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII):
             from file_handlers.docx_handler import process_docx
             result = process_docx(path, _MODEL, _URL, enabled_layers={"layer1"})
 
@@ -273,7 +273,7 @@ class TestDocxHandler:
 
     def test_empty_paragraph_skipped(self, tmp_path):
         path = self._create_docx(tmp_path, [""])
-        with patch("file_handlers.docx_handler.mask_text", return_value=_MASK_RESULT_WITH_PII) as mock_mask:
+        with patch("core.pipeline.mask_text", return_value=_MASK_RESULT_WITH_PII) as mock_mask:
             from file_handlers.docx_handler import process_docx
             process_docx(path, _MODEL, _URL, enabled_layers={"layer1"})
 

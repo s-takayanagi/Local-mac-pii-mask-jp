@@ -24,13 +24,35 @@ _PATTERNS: list[tuple[re.Pattern, str]] = [
 
 
 def apply_regex(text: str, excluded_tags: set[str] | None = None) -> tuple[str, list[dict]]:
+    """正規表現で PII をマスキングする。
+
+    全パターンのマッチを先に原文から収集し、重複するスパンを除外してから
+    末尾から順に置換する。これにより finditer 実行中に result が変化して
+    位置情報がずれる問題や、後段パターンが前段で挿入したタグを巻き込む問題を防ぐ。
+    """
     excluded = excluded_tags or set()
-    replacements: list[dict] = []
-    result = text
+    spans: list[tuple[int, int, str, str]] = []  # (start, end, matched, tag)
+    occupied: list[tuple[int, int]] = []
+
+    def _overlaps(s: int, e: int) -> bool:
+        return any(not (e <= os_ or s >= oe) for os_, oe in occupied)
+
     for pattern, tag in _PATTERNS:
         if tag in excluded:
             continue
-        for m in pattern.finditer(result):
-            replacements.append({"original": m.group(), "tag": tag})
-        result = pattern.sub(tag, result)
+        for m in pattern.finditer(text):
+            s, e = m.start(), m.end()
+            if _overlaps(s, e):
+                continue
+            spans.append((s, e, m.group(), tag))
+            occupied.append((s, e))
+
+    spans.sort(key=lambda x: x[0])
+    replacements: list[dict] = [
+        {"original": matched, "tag": tag} for _, _, matched, tag in spans
+    ]
+
+    result = text
+    for s, e, _, tag in sorted(spans, key=lambda x: x[0], reverse=True):
+        result = result[:s] + tag + result[e:]
     return result, replacements

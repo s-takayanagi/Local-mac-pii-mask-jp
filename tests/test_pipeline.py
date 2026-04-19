@@ -100,14 +100,17 @@ def test_all_layers_success():
 
 
 def test_layer3_failure_returns_l1_l2_result():
+    # L1/L2 が何も検出しなかったケースで Layer 3 が呼ばれ、応答なしで失敗する流れ。
+    # （L1/L2 がタグを残すと pipeline は Layer 3 をスキップする最適化のため、
+    #  Layer 3 失敗パスを検証するには L2 出力にタグが含まれていない必要がある）
     with (
-        patch("core.pipeline.apply_regex", return_value=("[電話番号]", [{"original": "090-1234-5678", "tag": "[電話番号]"}])),
-        patch("core.pipeline.apply_ner", return_value=("[電話番号]", [])),
+        patch("core.pipeline.apply_regex", return_value=("山田太郎と話した", [])),
+        patch("core.pipeline.apply_ner", return_value=("山田太郎と話した", [])),
         patch("core.pipeline.call_masker", return_value=None),
     ):
-        result = mask_text("090-1234-5678", _MODEL, _URL)
+        result = mask_text("山田太郎と話した", _MODEL, _URL)
 
-    assert result.final_text == "[電話番号]"
+    assert result.final_text == "山田太郎と話した"
     assert result.confidence == 0.7
     assert result.error is not None
     assert "Layer 3" in result.error

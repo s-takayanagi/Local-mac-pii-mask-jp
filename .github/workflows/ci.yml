@@ -17,7 +17,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11', '3.12']
+        # Python 3.12 は tokenizers 0.13.3（ja-ginza-electra → transformers 経由）の
+        # wheel が配布されておらず、新しい Rust でソースビルドも失敗するため対象外。
+        # Docker イメージ側の Python 3.11 での動作担保を正とする。
+        python-version: ['3.11']
 
     steps:
       - name: Checkout

@@ -16,6 +16,16 @@ updates:
     commit-message:
       prefix: "build"
       include: "scope"
+    ignore:
+      # GiNZA/spaCy/ja-ginza-electra は Python バージョン・モデル・sudachipy と
+      # 強く連動しており、自動 major bump はビルド失敗に直結する。
+      # 互換性を手動確認したうえで個別に更新する方針。
+      - dependency-name: "ja-ginza-electra"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "ginza"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "spacy"
+        update-types: ["version-update:semver-major"]
     groups:
       # マイナー / パッチは 1 つの PR にまとめる
       python-minor-and-patch:
@@ -59,3 +69,9 @@ updates:
     commit-message:
       prefix: "build"
       include: "scope"
+    ignore:
+      # ja-ginza-electra が対応する Python は 3.11〜3.12 のみ。
+      # pyproject.toml でも requires-python = ">=3.11,<3.13" と固定している。
+      # Python 3.13+ への major/minor bump は自動適用しない。
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]

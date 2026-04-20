@@ -1,0 +1,43 @@
+PII Masker — License (Provisional)
+===================================
+
+Copyright (c) 2026 PII Masker contributors
+
+All Rights Reserved (Provisional / 暫定).
+
+本プロジェクトは技術プレビュー版であり、正式なオープンソースライセンスは現在
+検討中です。正式ライセンスが決定・公開されるまでの間、本リポジトリに含まれる
+コード・設定・ドキュメントの取り扱いは以下のとおりとします。
+
+【許可される利用】
+  - 個人または組織内部での評価・検証・学習目的での利用
+  - バグ報告、フィードバック、プルリクエストの提出を目的としたフォーク・改変
+
+【許可されない利用（正式ライセンス決定までの間）】
+  - 再配布（ソースコード・バイナリ・ビルド成果物を問わず）
+  - 商用利用および商用製品・サービスへの組み込み
+  - 本プロジェクトから派生した独立プロダクトの公開
+
+本プロジェクトに含まれる第三者ライブラリ・モデルには、各々のライセンスが
+適用されます。詳細は THIRD_PARTY_NOTICES.md を参照してください。本ファイルの
+記載は、それら第三者ライセンスの条件を変更・制限するものではありません。
+
+本ソフトウェアは「現状のまま（AS-IS）」提供され、明示または黙示を問わず、
+商品性、特定目的への適合性、権利侵害の不存在を含むいかなる保証も行いません。
+著作権者および貢献者は、本ソフトウェアの使用または使用不能から生じる
+いかなる損害についても責任を負いません。
+
+正式ライセンスが決定した時点で本ファイルは置き換えられます。
+
+-----------------------------------
+
+PII Masker — License (Provisional, English Summary)
+
+Copyright (c) 2026 PII Masker contributors. All Rights Reserved (Provisional).
+
+This project is a technical preview. A formal open-source license is under
+consideration. Until a formal license is announced, you may use this
+repository for internal evaluation and for submitting feedback or pull
+requests, but you may NOT redistribute, use it commercially, or publish
+derivative products. Third-party dependencies retain their own licenses
+(see THIRD_PARTY_NOTICES.md). Provided AS-IS, without warranty of any kind.

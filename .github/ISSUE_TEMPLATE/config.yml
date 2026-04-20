@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 脆弱性の報告
+    url: https://github.com/s-takayanagi/Pii-masker-/security/advisories/new
+    about: セキュリティ上の問題は公開 Issue ではなく Private Vulnerability Reporting からご報告ください
+  - name: ❓ 質問・ディスカッション
+    url: https://github.com/s-takayanagi/Pii-masker-/discussions
+    about: 使い方の質問・仕様相談は Discussions でどうぞ（有効化されている場合）
